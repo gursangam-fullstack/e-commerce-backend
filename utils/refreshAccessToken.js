@@ -8,7 +8,7 @@ exports.refreshAccessToken = async (req) => {
     try {
         // Use the correct cookie name (case-sensitive)
         const oldRefreshToken = req.cookies?.refreshToken;
-        console.log('refreshAccessToken: received refreshToken from cookie:', oldRefreshToken);
+        // console.log('refreshAccessToken: received refreshToken from cookie:', oldRefreshToken);
 
         if (!oldRefreshToken) {
             return sendResponse("Refresh token missing", 401, false);
@@ -17,7 +17,7 @@ exports.refreshAccessToken = async (req) => {
         //verify refresh token is valid or not 
         const { tokenDetails, error } = await verifyRefreshToken(oldRefreshToken);
         if (error || !tokenDetails) {
-            console.warn('refreshAccessToken: verifyRefreshToken failed', { error, tokenDetails });
+            // console.warn('refreshAccessToken: verifyRefreshToken failed', { error, tokenDetails });
             return sendResponse("Invalid or expired refresh token", 401, false)
         }
 
@@ -26,13 +26,13 @@ exports.refreshAccessToken = async (req) => {
         if (!user) {
             return sendResponse("Invalid user", 404, false)
         }
-        console.log('refreshAccessToken: user for generateTokens:', user);
+        // console.log('refreshAccessToken: user for generateTokens:', user);
 
         // Find refresh token in DB
         const userRefreshToken = await userRefreshTokenModel.findOne({
             userId: tokenDetails._id,
         });
-        console.log('refreshAccessToken: userRefreshToken in DB:', userRefreshToken);
+        // console.log('refreshAccessToken: userRefreshToken in DB:', userRefreshToken);
 
         if (
             !userRefreshToken ||
