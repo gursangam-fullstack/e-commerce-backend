@@ -9,6 +9,8 @@ require("dotenv").config();
 require("./config/db");
 
 const cookieParser = require("cookie-parser");
+const passport = require('passport');
+require('./config/passport-jwt-strategy')
 const userRouter = require("./routers/userRouter");
 const categoryRouter = require("./routers/categoryRouter");
 const productRouter = require("./routers/productRouter");
@@ -25,6 +27,7 @@ const subSubCategoryRouter = require("./routers/subSubCategoryRouter");
 PORT = process.env.PORT || 3001;
 
 app.use(express.json());
+app.use(passport.initialize())
 app.use(cookieParser());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -71,7 +74,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use("/api/auth", userRouter);
+app.use("/api/user", userRouter);
 app.use("/api/category", categoryRouter);
 app.use("/api/product", productRouter);
 app.use("/api/subcategory", subCategoryRouter);

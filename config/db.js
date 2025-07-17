@@ -5,7 +5,7 @@ const MONGO_URL = process.env.MONGO_URL;
 mongoose
   .connect(MONGO_URL)
   .then(async () => {
-    // console.log("mongodb is connected");
+    console.log("mongodb is connected");
   })
   .catch((err) => {
     // console.log("failed to connect mongodb", err);

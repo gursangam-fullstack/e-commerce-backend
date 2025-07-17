@@ -87,7 +87,7 @@ exports.verifyTempUser = async (req, res) => {
 };
 
 // user login
-exports.userLogin = async (req, res) => { 
+exports.userLogin = async (req, res) => {
     try {
         const { email, password } = req.body;
 
@@ -310,3 +310,61 @@ exports.googleLogin = async (req, res) => {
 exports.userProfile = async (req, res) => {
     res.send({ "user": req.user })
 }
+
+exports.getAllUsers = async (req, res) => {
+    try {
+        // pagination
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 5;
+        const skip = (page - 1) * limit;
+        const total = await userModel.countDocuments();
+        const users = await userModel.find().skip(skip).limit(limit);
+
+        // Map each user to the required response format
+        const userList = users.map(user => ({
+            id: user._id,
+            slug: user.name || user.slug,  // adjust as per your user schema
+            email: user.email,
+            mobile: user.mobile,
+        }));
+
+        return sendResponse(res, "Users fetched successfully", 200, true, {
+            users: userList,
+            page,
+            limit,
+            total,
+        });
+    } catch (error) {
+        console.error("Get All Users Error:", error);
+        return sendResponse(res, "Internal server error", 500, false);
+    }
+};
+
+exports.getUserById = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Validate ID presence
+        if (!id) {
+            return sendResponse(res, "User ID is required", 400, false);
+        }
+
+        const user = await UserModel.findById(id);
+
+        if (!user) {
+            return sendResponse(res, "User not found", 404, false);
+        }
+
+        const userData = {
+            id: user._id,
+            slug: user.name || user.slug,
+            email: user.email,
+            mobile: user.mobile,
+        };
+
+        return sendResponse(res, "User fetched successfully", 200, true, { user: userData });
+    } catch (error) {
+        console.error("Get User By ID Error:", error);
+        return sendResponse(res, "Internal server error", 500, false);
+    }
+};

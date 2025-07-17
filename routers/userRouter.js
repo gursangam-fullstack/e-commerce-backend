@@ -1,5 +1,5 @@
 const express = require('express');
-const { userRegistration, verifyTempUser, userLogin, userProfile, userLogout, userChangePassword, userForgotPasswordOtpSender, userVerifyForgotPasswordOtp, googleLogin } = require('../controllers/userController');
+const { userRegistration, verifyTempUser, userLogin, userProfile, userLogout, userChangePassword, userForgotPasswordOtpSender, userVerifyForgotPasswordOtp, googleLogin, getAllUsers } = require('../controllers/userController');
 const { userRegistrationSchema, LoginFormSchema, changePasswordSchema, forgotPasswordOtpSchema, verifyForgotPasswordOtpSchema, verifyUserOtpSchema } = require('../validations/authValidation')
 const { accessTokenAutoRefresh } = require('../middlewares/accessTokenAutoRefresh');
 const passport = require('passport');
@@ -15,9 +15,11 @@ userRouter.post('/login', validate(LoginFormSchema), otpLimiter, userLogin)
 userRouter.post('/forgot-password-send-otp', validate(forgotPasswordOtpSchema), userForgotPasswordOtpSender)
 userRouter.post('/verify-forgot-password-otp', validate(verifyForgotPasswordOtpSchema), userVerifyForgotPasswordOtp)
 userRouter.post('/google', googleLogin);
+userRouter.get('/all-users', getAllUsers)
 
 //protected routes
 userRouter.get('/me', accessTokenAutoRefresh, passport.authenticate('jwt', { session: false }), authorizeRole('admin', 'user'), userProfile)
+
 userRouter.post('/logout', accessTokenAutoRefresh, passport.authenticate('jwt', { session: false }), userLogout)
 userRouter.put('/change-password', accessTokenAutoRefresh, passport.authenticate('jwt', { session: false }), validate(changePasswordSchema), userChangePassword)
 
