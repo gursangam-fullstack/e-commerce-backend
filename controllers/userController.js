@@ -1,7 +1,7 @@
 const sendResponse = require("../utils/sendResponse");
 
 const bcrypt = require('bcrypt')
-const generateOtp = require('../utils/generateOtp')
+const { generateOtp } = require('../utils/generateOtp')
 const sendEmailFun = require('../config/sendEmail')
 const VerificationEmail = require('../utils/verifyEmailTemplate')
 const tempUser = require('../model/tempUser');
@@ -19,7 +19,7 @@ exports.userRegistration = async (req, res) => {
 
     try {
 
-        const existingUser = await UserModel.findOne({ email });
+        const existingUser = await userModel.findOne({ email });
         if (existingUser) {
             return sendResponse(res, "User already exists", 400, false);
         }
@@ -69,7 +69,7 @@ exports.verifyTempUser = async (req, res) => {
             return sendResponse(res, "Invalid or expired OTP", 400, false);
         }
 
-        await new UserModel({
+        await new userModel({
             name: tempUserData.name,
             email: tempUserData.email,
             mobile: tempUserData.mobile,
@@ -117,7 +117,7 @@ exports.userLogin = async (req, res) => {
         //send success response with tokens
         return sendResponse(res, "Login Successfully", 200, true,
             {
-                user: { id: user._id, email: user.email, name: user.name, mobile: user.mobile },
+                user: { email: user.email, name: user.name },
                 is_auth: true
             }
         )
@@ -162,7 +162,7 @@ exports.userChangePassword = async (req, res) => {
         const salt = await bcrypt.genSalt(Number(process.env.SALT || 10));
         const newHashedPassword = await bcrypt.hash(password, salt);
 
-        await UserModel.findByIdAndUpdate(req.user._id, {
+        await userModel.findByIdAndUpdate(req.user._id, {
             $set: {
                 password: newHashedPassword,
             },
@@ -181,7 +181,7 @@ exports.userForgotPasswordOtpSender = async (req, res) => {
     try {
         const { email } = req.body;
 
-        const user = await UserModel.findOne({ email });
+        const user = await userModel.findOne({ email });
         if (!user) {
             return sendResponse(res, "User not found", 404, false);
         }
@@ -224,7 +224,7 @@ exports.userVerifyForgotPasswordOtp = async (req, res) => {
             return sendResponse(res, "New password and confirm password do not match", 400, false);
         }
 
-        const user = await UserModel.findOne({ email });
+        const user = await userModel.findOne({ email });
         if (!user) {
             return sendResponse(res, "User not found", 404, false);
         }
@@ -266,11 +266,11 @@ exports.googleLogin = async (req, res) => {
         };
 
         // Check if user exists
-        let user = await UserModel.findOne({ email: userInfo.email });
+        let user = await userModel.findOne({ email: userInfo.email });
 
         // If not, create user with no password (Google login only)
         if (!user) {
-            user = await UserModel.create({
+            user = await userModel.create({
                 name: userInfo.name,
                 email: userInfo.email,
                 password: null,
@@ -289,15 +289,10 @@ exports.googleLogin = async (req, res) => {
 
         return sendResponse(res, "Google login successful", 200, true, {
             user: {
-                id: user._id,
                 name: user.name,
                 email: user.email,
-                roles: user.role[0],
             },
-            access_token: accessToken,
-            refresh_token: refreshToken,
-            access_token_exp: accessTokenExp,
-            is_auth: true,
+
         });
 
     } catch (error) {
@@ -349,7 +344,7 @@ exports.getUserById = async (req, res) => {
             return sendResponse(res, "User ID is required", 400, false);
         }
 
-        const user = await UserModel.findById(id);
+        const user = await userModel.findById(id);
 
         if (!user) {
             return sendResponse(res, "User not found", 404, false);
