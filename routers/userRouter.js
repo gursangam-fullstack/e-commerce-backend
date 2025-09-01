@@ -15,11 +15,10 @@ userRouter.post('/login', validate(LoginFormSchema), otpLimiter, userLogin)
 userRouter.post('/forgot-password-send-otp', validate(forgotPasswordOtpSchema), userForgotPasswordOtpSender)
 userRouter.post('/verify-forgot-password-otp', validate(verifyForgotPasswordOtpSchema), userVerifyForgotPasswordOtp)
 userRouter.post('/google', googleLogin);
-userRouter.get('/all-users', getAllUsers)
 
 //protected routes
 userRouter.get('/me', accessTokenAutoRefresh, passport.authenticate('jwt', { session: false }), authorizeRole('admin', 'user'), userProfile)
-
+userRouter.get('/all-users', accessTokenAutoRefresh, passport.authenticate('jwt', { session: false }), authorizeRole('admin'), getAllUsers)
 userRouter.post('/logout', accessTokenAutoRefresh, passport.authenticate('jwt', { session: false }), userLogout)
 userRouter.put('/change-password', accessTokenAutoRefresh, passport.authenticate('jwt', { session: false }), validate(changePasswordSchema), userChangePassword)
 

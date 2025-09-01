@@ -1,6 +1,7 @@
 const sendResponse = require("../utils/sendResponse");
 
 const bcrypt = require('bcrypt')
+
 const { generateOtp } = require("../utils/generateOtp"); // ✅ Correct
 
 const sendEmailFun = require('../config/sendEmail')
@@ -64,6 +65,7 @@ exports.verifyTempUser = async (req, res) => {
     console.log("verifyTempUser called with:", { email, otp });
   
     try {
+
       const tempUserData = await tempUser.findOne({ email });
   
       if (!tempUserData) {
@@ -92,6 +94,7 @@ exports.verifyTempUser = async (req, res) => {
       await tempUser.deleteOne({ email });
   
       return sendResponse(res, "Email verified", 200, true);
+
     } catch (err) {
       console.error("Error in verifyTempUser:", err);
       return sendResponse(res, "Unable to verify OTP. Please try again later.", 500, false);
@@ -129,7 +132,7 @@ exports.userLogin = async (req, res) => {
         //send success response with tokens
         return sendResponse(res, "Login Successfully", 200, true,
             {
-                user: { id: user._id, email: user.email, name: user.name, mobile: user.mobile },
+                user: { email: user.email, name: user.name },
                 is_auth: true
             }
         )
@@ -301,15 +304,10 @@ exports.googleLogin = async (req, res) => {
 
         return sendResponse(res, "Google login successful", 200, true, {
             user: {
-                id: user._id,
                 name: user.name,
                 email: user.email,
-                roles: user.role[0],
             },
-            access_token: accessToken,
-            refresh_token: refreshToken,
-            access_token_exp: accessTokenExp,
-            is_auth: true,
+
         });
 
     } catch (error) {
