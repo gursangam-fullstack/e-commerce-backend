@@ -1,7 +1,9 @@
 const sendResponse = require("../utils/sendResponse");
 
 const bcrypt = require('bcrypt')
-const { generateOtp } = require('../utils/generateOtp')
+
+const { generateOtp } = require("../utils/generateOtp"); // ✅ Correct
+
 const sendEmailFun = require('../config/sendEmail')
 const VerificationEmail = require('../utils/verifyEmailTemplate')
 const tempUser = require('../model/tempUser');
@@ -9,13 +11,15 @@ const { generateTokens } = require("../utils/generateTokens");
 const { setTokensCookies } = require("../utils/setTokensCookies");
 const userRefreshTokenModel = require('../model/userRefreshToken');
 const { OAuth2Client } = require("google-auth-library");
-const userModel = require("../model/user");
+const userModel = require("../model/User");
+
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
 
 
 // user registration
 exports.userRegistration = async (req, res) => {
     const { name, email, mobile, password } = req.body;
+console.log( "request.body", name, email, mobile, password);
 
     try {
 
@@ -28,7 +32,8 @@ exports.userRegistration = async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, salt);
 
         const { otp, otpExpiresAt } = generateOtp(10);
-
+          console.log(otp, otpExpiresAt,"otp, otpExpiresAt");
+          
         await tempUser.findOneAndUpdate(
             { email },
             { name, email, mobile, passwordHash: hashedPassword, otp, otpExpiresAt },
@@ -39,53 +44,63 @@ exports.userRegistration = async (req, res) => {
 
         sendEmailFun({
             to: email,
-            subject: "Verify Your Email - Ecommerce",
+            subject: "Verify Your Email - Ecommerce",      
             text: "test",
             html: VerificationEmail(name, otp),
         }).catch(err => {
-            // console.error("Failed to send email:", err);
+            console.error("Failed to send email:", err);
         });
 
         return sendResponse(res, "OTP sent successfully", 200, true);
     } catch (err) {
-        // console.error("Error in user registration:", err);
+        console.error("Error in user registration:", err);
         return sendResponse(res, "Unable to register please try again later", 500, false);
     }
 };
 
+
 // user Email Verification
 exports.verifyTempUser = async (req, res) => {
-    // console.log("verifyTempUser", req.body);
     const { email, otp } = req.body;
-
+    console.log("verifyTempUser called with:", { email, otp });
+  
     try {
-        const tempUserData = await tempUser.findOne({ email });
 
-        if (
-            !tempUserData ||
-            tempUserData.otp !== otp ||
-            tempUserData.otpExpiresAt < new Date()
-        ) {
-            return sendResponse(res, "Invalid or expired OTP", 400, false);
-        }
-
-        await new userModel({
-            name: tempUserData.name,
-            email: tempUserData.email,
-            mobile: tempUserData.mobile,
-            password: tempUserData.passwordHash,
-        }).save();
-
-        await tempUser.deleteOne({ email });
-
-        return sendResponse(res, "Eamil verified", 200, true);
+      const tempUserData = await tempUser.findOne({ email });
+  
+      if (!tempUserData) {
+        return sendResponse(res, "User not found or OTP expired", 400, false);
+      }
+  
+      // Compare OTP as string
+      if (tempUserData.otp !== otp.toString()) {
+        return sendResponse(res, "Invalid OTP", 400, false);
+      }
+  
+      // Check expiry
+      if (tempUserData.otpExpiresAt < new Date()) {
+        return sendResponse(res, "OTP has expired", 400, false);
+      }
+  
+      // Create user in main collection
+      await new userModel({
+        name: tempUserData.name,
+        email: tempUserData.email,
+        mobile: tempUserData.mobile,
+        password: tempUserData.passwordHash,
+      }).save();
+  
+      // Delete temp record
+      await tempUser.deleteOne({ email });
+  
+      return sendResponse(res, "Email verified", 200, true);
 
     } catch (err) {
-        // console.error("Error in verifyTempUser:", err);
-        return sendResponse(res, "Unable to verify otp please try again later", 500, false);
+      console.error("Error in verifyTempUser:", err);
+      return sendResponse(res, "Unable to verify OTP. Please try again later.", 500, false);
     }
-};
-
+  };
+  
 // user login
 exports.userLogin = async (req, res) => {
     try {
