@@ -4,17 +4,31 @@ const userSchema = new mongoose.Schema(
   {
     name: {
       type: String,
-      required: [true, "Provide Name"],
+      required: [true, "Provide name"],
+      trim: true,
     },
 
     email: {
       type: String,
       required: [true, "Provide email"],
+      trim: true,
+      lowercase: true,
+      unique: true,
     },
 
     password: {
       type: String,
-      required: [true, "Provide password"],
+      default: null,
+    },
+
+    googleId: {
+      type: String,
+      default: null,
+    },
+
+    isVerified: {
+      type: Boolean,
+      default: false,
     },
 
     avatar: {
@@ -31,7 +45,7 @@ const userSchema = new mongoose.Schema(
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "address",
-      }
+      },
     ],
 
     shopping_cart: [
@@ -40,30 +54,36 @@ const userSchema = new mongoose.Schema(
         ref: "CartProduct",
       },
     ],
+
     wishlist: [
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Wishlist",
       },
     ],
+
     my_list: [
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "MyList",
       },
     ],
+
     order_history: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "order",
     },
+
     otp: {
       type: String,
       default: null,
     },
+
     otp_expires: {
       type: Date,
       default: null,
     },
+
     role: {
       type: String,
       enum: ["admin", "user"],

@@ -1,7 +1,8 @@
 const sendResponse = require("../utils/sendResponse");
 
 const bcrypt = require('bcrypt')
-const generateOtp = require('../utils/generateOtp')
+const { generateOtp } = require("../utils/generateOtp"); // ✅ Correct
+
 const sendEmailFun = require('../config/sendEmail')
 const VerificationEmail = require('../utils/verifyEmailTemplate')
 const tempUser = require('../model/tempUser');
@@ -9,17 +10,19 @@ const { generateTokens } = require("../utils/generateTokens");
 const { setTokensCookies } = require("../utils/setTokensCookies");
 const userRefreshTokenModel = require('../model/userRefreshToken');
 const { OAuth2Client } = require("google-auth-library");
-const userModel = require("../model/user");
+const userModel = require("../model/User");
+
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
 
 
 // user registration
 exports.userRegistration = async (req, res) => {
     const { name, email, mobile, password } = req.body;
+console.log( "request.body", name, email, mobile, password);
 
     try {
 
-        const existingUser = await UserModel.findOne({ email });
+        const existingUser = await userModel.findOne({ email });
         if (existingUser) {
             return sendResponse(res, "User already exists", 400, false);
         }
@@ -28,7 +31,8 @@ exports.userRegistration = async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, salt);
 
         const { otp, otpExpiresAt } = generateOtp(10);
-
+          console.log(otp, otpExpiresAt,"otp, otpExpiresAt");
+          
         await tempUser.findOneAndUpdate(
             { email },
             { name, email, mobile, passwordHash: hashedPassword, otp, otpExpiresAt },
@@ -39,53 +43,61 @@ exports.userRegistration = async (req, res) => {
 
         sendEmailFun({
             to: email,
-            subject: "Verify Your Email - Ecommerce",
+            subject: "Verify Your Email - Ecommerce",      
             text: "test",
             html: VerificationEmail(name, otp),
         }).catch(err => {
-            // console.error("Failed to send email:", err);
+            console.error("Failed to send email:", err);
         });
 
         return sendResponse(res, "OTP sent successfully", 200, true);
     } catch (err) {
-        // console.error("Error in user registration:", err);
+        console.error("Error in user registration:", err);
         return sendResponse(res, "Unable to register please try again later", 500, false);
     }
 };
 
+
 // user Email Verification
 exports.verifyTempUser = async (req, res) => {
-    // console.log("verifyTempUser", req.body);
     const { email, otp } = req.body;
-
+    console.log("verifyTempUser called with:", { email, otp });
+  
     try {
-        const tempUserData = await tempUser.findOne({ email });
-
-        if (
-            !tempUserData ||
-            tempUserData.otp !== otp ||
-            tempUserData.otpExpiresAt < new Date()
-        ) {
-            return sendResponse(res, "Invalid or expired OTP", 400, false);
-        }
-
-        await new UserModel({
-            name: tempUserData.name,
-            email: tempUserData.email,
-            mobile: tempUserData.mobile,
-            password: tempUserData.passwordHash,
-        }).save();
-
-        await tempUser.deleteOne({ email });
-
-        return sendResponse(res, "Eamil verified", 200, true);
-
+      const tempUserData = await tempUser.findOne({ email });
+  
+      if (!tempUserData) {
+        return sendResponse(res, "User not found or OTP expired", 400, false);
+      }
+  
+      // Compare OTP as string
+      if (tempUserData.otp !== otp.toString()) {
+        return sendResponse(res, "Invalid OTP", 400, false);
+      }
+  
+      // Check expiry
+      if (tempUserData.otpExpiresAt < new Date()) {
+        return sendResponse(res, "OTP has expired", 400, false);
+      }
+  
+      // Create user in main collection
+      await new userModel({
+        name: tempUserData.name,
+        email: tempUserData.email,
+        mobile: tempUserData.mobile,
+        password: tempUserData.passwordHash,
+      }).save();
+  
+      // Delete temp record
+      await tempUser.deleteOne({ email });
+  
+      return sendResponse(res, "Email verified", 200, true);
     } catch (err) {
-        // console.error("Error in verifyTempUser:", err);
-        return sendResponse(res, "Unable to verify otp please try again later", 500, false);
+      console.error("Error in verifyTempUser:", err);
+      return sendResponse(res, "Unable to verify OTP. Please try again later.", 500, false);
     }
-};
-
+  };
+  
 // user login
 exports.userLogin = async (req, res) => {
     try {
@@ -162,7 +174,7 @@ exports.userChangePassword = async (req, res) => {
         const salt = await bcrypt.genSalt(Number(process.env.SALT || 10));
         const newHashedPassword = await bcrypt.hash(password, salt);
 
-        await UserModel.findByIdAndUpdate(req.user._id, {
+        await userModel.findByIdAndUpdate(req.user._id, {
             $set: {
                 password: newHashedPassword,
             },
@@ -181,7 +193,7 @@ exports.userForgotPasswordOtpSender = async (req, res) => {
     try {
         const { email } = req.body;
 
-        const user = await UserModel.findOne({ email });
+        const user = await userModel.findOne({ email });
         if (!user) {
             return sendResponse(res, "User not found", 404, false);
         }
@@ -224,7 +236,7 @@ exports.userVerifyForgotPasswordOtp = async (req, res) => {
             return sendResponse(res, "New password and confirm password do not match", 400, false);
         }
 
-        const user = await UserModel.findOne({ email });
+        const user = await userModel.findOne({ email });
         if (!user) {
             return sendResponse(res, "User not found", 404, false);
         }
@@ -266,11 +278,11 @@ exports.googleLogin = async (req, res) => {
         };
 
         // Check if user exists
-        let user = await UserModel.findOne({ email: userInfo.email });
+        let user = await userModel.findOne({ email: userInfo.email });
 
         // If not, create user with no password (Google login only)
         if (!user) {
-            user = await UserModel.create({
+            user = await userModel.create({
                 name: userInfo.name,
                 email: userInfo.email,
                 password: null,
@@ -349,7 +361,7 @@ exports.getUserById = async (req, res) => {
             return sendResponse(res, "User ID is required", 400, false);
         }
 
-        const user = await UserModel.findById(id);
+        const user = await userModel.findById(id);
 
         if (!user) {
             return sendResponse(res, "User not found", 404, false);
