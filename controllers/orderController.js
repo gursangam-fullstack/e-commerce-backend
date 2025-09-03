@@ -1,13 +1,18 @@
 // routes/orders.js or similar
-
-const mongoose = require('mongoose');
 const Razorpay = require('razorpay');
+const mongoose = require('mongoose');
+
 const crypto = require('crypto');
 const orderModel = require('../model/order');
 const addressModel = require('../model/address');
 const sendResponse = require('../utils/sendResponse');
 const sendEmailFun = require('../config/sendEmail');
 const productModel = require('../model/product');
+
+require("dotenv").config();
+
+
+console.log("🔑 RAZORPAY_KEY_ID:", process.env.RAZERPAY_API_KEY);
 
 // Initialize Razorpay
 const razorpay = new Razorpay({
