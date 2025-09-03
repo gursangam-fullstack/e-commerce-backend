@@ -19,7 +19,7 @@ const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
 // user registration
 exports.userRegistration = async (req, res) => {
     const { name, email, mobile, password } = req.body;
-console.log( "request.body", name, email, mobile, password);
+//console.log( "request.body", name, email, mobile, password);
 
     try {
 
