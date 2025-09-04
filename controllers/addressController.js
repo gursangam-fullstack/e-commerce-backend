@@ -1,13 +1,13 @@
 const mongoose = require("mongoose");
 const Address = require("../model/address");
-const userModel = require("../model/user");
 const sendResponse = require("../utils/sendResponse");
+const userModel = require("../model/User");
 
 // Create address and link to user
 exports.createAddressController = async (req, res) => {
   try {
+    const userId = req.user.id;
     const {
-      userId,
       firstName,
       lastName,
       mobileNo,
@@ -21,6 +21,8 @@ exports.createAddressController = async (req, res) => {
       country,
     } = req.body;
 
+    // console.log("userId", req.user.id);
+
     if (!userId) {
       return sendResponse(res, "User ID is required", 400, false);
     }
@@ -31,8 +33,13 @@ exports.createAddressController = async (req, res) => {
     }
 
     const addressCount = await Address.countDocuments({ user: userId });
-    if (addressCount >= 5) {
-      return sendResponse(res, "You can only add up to 5 addresses", 400, false);
+    if (addressCount >= 10) {
+      return sendResponse(
+        res,
+        "You can only add up to 10 addresses",
+        400,
+        false
+      );
     }
 
     const existingAddress = await Address.findOne({
@@ -50,7 +57,12 @@ exports.createAddressController = async (req, res) => {
     });
 
     if (existingAddress) {
-      return sendResponse(res, "This address already exists in the database", 409, false);
+      return sendResponse(
+        res,
+        "This address already exists in the database",
+        409,
+        false
+      );
     }
 
     // ✅ Create and save new address
@@ -71,24 +83,20 @@ exports.createAddressController = async (req, res) => {
 
     await address.save();
 
-    // ✅ Link address to user
+    // Link address to user
     user.address_details.push(address._id);
     await user.save();
 
-    return sendResponse(res, "Address saved and linked to user successfully", 201, true, {
-      data: address
-    });
-  } catch (error) {
-    if (error.name === "ValidationError") {
-      const formattedErrors = {};
-      for (let field in error.errors) {
-        formattedErrors[field] = error.errors[field].message;
+    return sendResponse(
+      res,
+      "Address saved and linked to user successfully",
+      201,
+      true,
+      {
+        data: address,
       }
-      return sendResponse(res, "Validation failed", 400, false, {
-        errors: formattedErrors
-      });
-    }
-
+    );
+  } catch (error) {
     // console.error("Error creating address:", error);
     return sendResponse(res, "Internal server error", 500, false);
   }
@@ -97,7 +105,7 @@ exports.createAddressController = async (req, res) => {
 // Get address by id
 exports.getAddressById = async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = req.user.id;
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 5;
     const skip = (page - 1) * limit;
@@ -108,25 +116,38 @@ exports.getAddressById = async (req, res) => {
     }
 
     // Fetch total count
-    const totalItems = await Address.countDocuments({ user: userId });
+    const total = await Address.countDocuments({ user: userId });
 
-    // Find all addresses linked to this user
+    // Fetch paginated addresses
     const addresses = await Address.find({ user: userId })
       .skip(skip)
-      .limit(limit);
+      .limit(limit)
+      .lean(); 
 
-    if (!addresses || addresses.length === 0) {
-      return sendResponse(res, "No addresses found for this user", 404, false);
-    }
+    // Transform addresses (optional - in case you want to hide fields)
+    const updatedAddresses = addresses.map((addr) => ({
+      id: addr._id,
+      fullName: addr.fullName,
+      phone: addr.phone,
+      street: addr.street,
+      city: addr.city,
+      state: addr.state,
+      postalCode: addr.postalCode,
+      country: addr.country,
+      isDefault: addr.isDefault || false,
+    }));
+
+    // Calculate hasMore
+    const hasMore = limit > 0 ? page * limit < total : false;
 
     return sendResponse(res, "Addresses retrieved successfully", 200, true, {
-      data: addresses,
-      total: totalItems,
+      data: updatedAddresses,
+      total,
       page,
-      limit
+      limit,
+      hasMore,
     });
   } catch (error) {
-    // console.error("Error fetching addresses by user ID:", error);
     return sendResponse(res, "Error fetching addresses", 500, false);
   }
 };
@@ -150,6 +171,7 @@ exports.updateAddress = async (req, res) => {
     const addressId = req.params.id;
 
     const existingAddress = await Address.findById(addressId);
+    
     if (!existingAddress) {
       return sendResponse(res, "Address not found", 404, false);
     }
@@ -168,7 +190,12 @@ exports.updateAddress = async (req, res) => {
       existingAddress.country === country;
 
     if (isSame) {
-      return sendResponse(res, "No changes detected. Address is already up to date", 409, false);
+      return sendResponse(
+        res,
+        "No changes detected. Address is already up to date",
+        409,
+        false
+      );
     }
 
     const updated = await Address.findByIdAndUpdate(
@@ -190,37 +217,32 @@ exports.updateAddress = async (req, res) => {
     );
 
     return sendResponse(res, "Address updated successfully", 200, true, {
-      data: updated
+      data: updated,
     });
-  } catch (error) {
-    if (error.name === "ValidationError") {
-      const formattedErrors = {};
-      for (let field in error.errors) {
-        formattedErrors[field] = error.errors[field].message;
-      }
-      return sendResponse(res, "Validation failed", 400, false, {
-        errors: formattedErrors
-      });
-    }
+  } catch (error){
     return sendResponse(res, "Internal server error", 500, false);
   }
 };
 
 // Delete address
 exports.deleteAddress = async (req, res) => {
-  // console.log(req.params)
   try {
-    // console.log(req.params.id)
-    const deleted = await Address.findByIdAndDelete(req.params.id);
+    const addressId = req.params.id;
+
+    // Step 1: Delete address
+    const deleted = await Address.findByIdAndDelete(addressId);
     if (!deleted) {
       return sendResponse(res, "Address not found", 404, false);
     }
 
-    // Optionally, remove reference from user.address_details here if needed
+    // Step 2: Unlink from User.address_details
+    await userModel.updateMany(
+      { address_details: addressId },
+      { $pull: { address_details: addressId } }
+    );
 
     return sendResponse(res, "Address deleted successfully", 200, true);
   } catch (error) {
-    // console.error("Error deleting address:", error);
     return sendResponse(res, "Error deleting address", 500, false);
   }
 };

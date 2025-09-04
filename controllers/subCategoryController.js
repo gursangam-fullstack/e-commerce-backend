@@ -2,8 +2,8 @@ const subCategory = require("../model/subCategory");
 const SubCategory = require("../model/subCategory");
 const slugify = require("slugify");
 const sendResponse = require("../utils/sendResponse");
-const SubSubCategory  = require("../model/subSubCategory");
-const Product  = require("../model/product");
+const SubSubCategory = require("../model/subSubCategory");
+const Product = require("../model/product");
 const Category = require("../model/category");
 const cloudinary = require("cloudinary").v2;
 const fs = require("fs");
@@ -20,14 +20,14 @@ cloudinary.config({
 const extractPublicIdFromUrl = (url) => {
   try {
     // Parse the URL to get the path
-    const urlParts = url.split('/');
+    const urlParts = url.split("/");
     // Find the upload part and get everything after it
-    const uploadIndex = urlParts.findIndex(part => part === 'upload');
+    const uploadIndex = urlParts.findIndex((part) => part === "upload");
     if (uploadIndex !== -1 && uploadIndex + 2 < urlParts.length) {
       // Get the version and public_id parts
-      const versionAndPublicId = urlParts.slice(uploadIndex + 2).join('/');
+      const versionAndPublicId = urlParts.slice(uploadIndex + 2).join("/");
       // Remove the file extension
-      const publicId = versionAndPublicId.split('.')[0];
+      const publicId = versionAndPublicId.split(".")[0];
       return publicId;
     }
     return null;
@@ -40,7 +40,7 @@ const extractPublicIdFromUrl = (url) => {
 // Helper function to clean up temporary files
 const cleanupTemporaryFiles = (files) => {
   if (!files || files.length === 0) return;
-  
+
   for (const file of files) {
     try {
       const filePath = `uploads/${file.filename}`;
@@ -61,7 +61,12 @@ exports.createSubCategory = async (req, res) => {
 
     // Validate subcategory name
     if (!name) {
-      return sendResponse(res, "Subcategory name should not be empty", 400, false);
+      return sendResponse(
+        res,
+        "Subcategory name should not be empty",
+        400,
+        false
+      );
     }
 
     // Validate parent category
@@ -83,7 +88,12 @@ exports.createSubCategory = async (req, res) => {
     });
 
     if (slugExists) {
-      return sendResponse(res, "Subcategory already exists under this parent category", 400, false);
+      return sendResponse(
+        res,
+        "Subcategory already exists under this parent category",
+        400,
+        false
+      );
     }
 
     // Upload images to Cloudinary
@@ -103,7 +113,7 @@ exports.createSubCategory = async (req, res) => {
         );
         imagesArr.push(result.secure_url);
         uploadedFiles.push(subCategoryImages[i]); // Track successfully uploaded files
-        
+
         // Delete the temporary file after successful upload
         try {
           fs.unlinkSync(`uploads/${subCategoryImages[i].filename}`);
@@ -114,11 +124,16 @@ exports.createSubCategory = async (req, res) => {
       }
     } catch (uploadError) {
       // console.error("Error uploading image:", uploadError);
-      
+
       // Clean up any temporary files that might still exist
       cleanupTemporaryFiles(subCategoryImages);
-      
-      return sendResponse(res, "Error uploading image to Cloudinary", 500, false);
+
+      return sendResponse(
+        res,
+        "Error uploading image to Cloudinary",
+        500,
+        false
+      );
     }
 
     // ✅ Create new subcategory
@@ -132,24 +147,34 @@ exports.createSubCategory = async (req, res) => {
     await subCategory.save();
 
     return sendResponse(res, "SubCategory created successfully", 201, true, {
-      data: subCategory
+      data: subCategory,
     });
   } catch (error) {
     // console.error("Error creating subcategory:", error);
-    
+
     // Clean up any temporary files in case of any error
     if (req.files && req.files.length > 0) {
       cleanupTemporaryFiles(req.files);
     }
 
     // Handle multer file size error
-    if (error.code === 'LIMIT_FILE_SIZE') {
-      return sendResponse(res, "File size too large. Maximum size allowed is 5MB", 400, false);
+    if (error.code === "LIMIT_FILE_SIZE") {
+      return sendResponse(
+        res,
+        "File size too large. Maximum size allowed is 5MB",
+        400,
+        false
+      );
     }
 
     // Handle other multer errors
-    if (error.message && error.message.includes('Only images are allowed')) {
-      return sendResponse(res, "Only image files (JPEG, PNG, JPG) are allowed", 400, false);
+    if (error.message && error.message.includes("Only images are allowed")) {
+      return sendResponse(
+        res,
+        "Only image files (JPEG, PNG, JPG) are allowed",
+        400,
+        false
+      );
     }
 
     return sendResponse(res, "Error creating subcategory", 500, false);
@@ -159,28 +184,30 @@ exports.createSubCategory = async (req, res) => {
 // get all products
 exports.getAllSubCategories = async (req, res) => {
   try {
-    //pagination code
-    const page = parseInt(req.query.page) || 0;
+    // pagination
+    const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 0;
     const skip = (page - 1) * limit;
     const total = await SubCategory.countDocuments();
-    //end
+
+    console.log("limit", limit);
+
     const subCategories = await SubCategory.find()
       .skip(skip)
       .limit(limit)
-      .populate("parentCategory", "name slug images"); // include images here
+      .populate("parentCategory", "name slug images");
 
     const updatedSubCategories = subCategories.map((sub) => {
       const parent = sub.parentCategory;
 
-      // Subcategory image(s) - now using Cloudinary URLs directly
-      let subCategoryImageUrls = sub.images || [];
+      // Subcategory images
+      const subCategoryImageUrls = sub.images || [];
 
-      // Parent category image - now using Cloudinary URLs directly
-      let parentImageUrl = null;
-      if (parent && parent.images && parent.images.length > 0) {
-        parentImageUrl = parent.images[0];
-      }
+      // Parent category first image
+      const parentImageUrl =
+        parent && parent.images && parent.images.length > 0
+          ? parent.images[0]
+          : null;
 
       return {
         id: sub._id,
@@ -198,14 +225,23 @@ exports.getAllSubCategories = async (req, res) => {
       };
     });
 
-    return sendResponse(res, "SubCategories retrieved successfully", 200, true, {
-      data: updatedSubCategories,
-      total,
-      page,
-      limit
-    });
+    // calculate hasMore
+    const hasMore = limit > 0 ? page * limit < total : false;
+
+    return sendResponse(
+      res,
+      "SubCategories retrieved successfully",
+      200,
+      true,
+      {
+        data: updatedSubCategories,
+        total,
+        page,
+        limit,
+        hasMore,
+      }
+    );
   } catch (error) {
-    // console.error("Error fetching subcategories:", error);
     return sendResponse(res, "Error fetching subcategories", 500, false);
   }
 };
@@ -226,18 +262,18 @@ exports.updateSubCategory = async (req, res) => {
     const updateData = {
       name,
     };
-    
+
     // Only update parentCategory if parent is explicitly provided
     if (parent !== undefined) {
       updateData.parentCategory = parent || null;
     }
-    
+
     // Generate new slug if name is being updated
     if (name) {
       const newSlug = slugify(name, { lower: true, strict: true });
       updateData.slug = newSlug;
     }
-    
+
     // Only update images if new images are uploaded
     if (subCategoryImages && subCategoryImages.length > 0) {
       // Delete old images from Cloudinary if they exist
@@ -273,7 +309,7 @@ exports.updateSubCategory = async (req, res) => {
           );
           imagesArr.push(result.secure_url);
           uploadedFiles.push(subCategoryImages[i]); // Track successfully uploaded files
-          
+
           // Delete the temporary file after successful upload
           try {
             fs.unlinkSync(`uploads/${subCategoryImages[i].filename}`);
@@ -285,11 +321,16 @@ exports.updateSubCategory = async (req, res) => {
         updateData.images = imagesArr;
       } catch (uploadError) {
         // console.error("Error uploading image:", uploadError);
-        
+
         // Clean up any temporary files that might still exist
         cleanupTemporaryFiles(subCategoryImages);
-        
-        return sendResponse(res, "Error uploading image to Cloudinary", 500, false);
+
+        return sendResponse(
+          res,
+          "Error uploading image to Cloudinary",
+          500,
+          false
+        );
       }
     }
 
@@ -325,26 +366,36 @@ exports.updateSubCategory = async (req, res) => {
     };
 
     return sendResponse(res, "SubCategory updated successfully", 200, true, {
-      data: responseData
+      data: responseData,
     });
   } catch (error) {
     // console.error("Error updating subcategory:", error);
-    
+
     // Clean up any temporary files in case of any error
     if (req.files && req.files.length > 0) {
       cleanupTemporaryFiles(req.files);
     }
-    
+
     // Handle multer file size error
-    if (error.code === 'LIMIT_FILE_SIZE') {
-      return sendResponse(res, "File size too large. Maximum size allowed is 5MB", 400, false);
+    if (error.code === "LIMIT_FILE_SIZE") {
+      return sendResponse(
+        res,
+        "File size too large. Maximum size allowed is 5MB",
+        400,
+        false
+      );
     }
-    
+
     // Handle other multer errors
-    if (error.message && error.message.includes('Only images are allowed')) {
-      return sendResponse(res, "Only image files (JPEG, PNG, JPG) are allowed", 400, false);
+    if (error.message && error.message.includes("Only images are allowed")) {
+      return sendResponse(
+        res,
+        "Only image files (JPEG, PNG, JPG) are allowed",
+        400,
+        false
+      );
     }
-    
+
     return sendResponse(res, "Error updating subcategory", 500, false);
   }
 };
@@ -395,7 +446,7 @@ exports.deleteAllSubCategory = async (req, res) => {
   try {
     // Get all subcategories to access their images before deletion
     const allSubCategories = await SubCategory.find({});
-    
+
     // Delete all images from Cloudinary
     for (const subCategory of allSubCategories) {
       if (subCategory.images && subCategory.images.length > 0) {
@@ -416,10 +467,16 @@ exports.deleteAllSubCategory = async (req, res) => {
 
     // Delete all subcategories from database
     const result = await SubCategory.deleteMany({});
-    
-    return sendResponse(res, "All sub categories deleted successfully", 200, true, {
-      deletedCount: result.deletedCount
-    });
+
+    return sendResponse(
+      res,
+      "All sub categories deleted successfully",
+      200,
+      true,
+      {
+        deletedCount: result.deletedCount,
+      }
+    );
   } catch (error) {
     // console.error("Delete all sub categories:", error);
     return sendResponse(res, "Error deleting all sub categories", 500, false);
@@ -440,7 +497,7 @@ exports.getSubCategoryById = async (req, res) => {
     }
 
     return sendResponse(res, "SubCategory retrieved successfully", 200, true, {
-      data: subCategory
+      data: subCategory,
     });
   } catch (error) {
     // console.error("Error fetching sub-category by ID:", error);
@@ -456,8 +513,9 @@ exports.getSubCategoriesByCategory = async (req, res) => {
       return sendResponse(res, "Category ID is required", 400, false);
     }
 
-    const subCategories = await SubCategory.find({ parentCategory: categoryId })
-      .populate("parentCategory", "name slug images");
+    const subCategories = await SubCategory.find({
+      parentCategory: categoryId,
+    }).populate("parentCategory", "name slug images");
 
     const updatedSubCategories = subCategories.map((sub) => {
       const parent = sub.parentCategory;
@@ -487,10 +545,16 @@ exports.getSubCategoriesByCategory = async (req, res) => {
       };
     });
 
-    return sendResponse(res, "SubCategories retrieved successfully", 200, true, {
-      data: updatedSubCategories,
-      total: updatedSubCategories.length
-    });
+    return sendResponse(
+      res,
+      "SubCategories retrieved successfully",
+      200,
+      true,
+      {
+        data: updatedSubCategories,
+        total: updatedSubCategories.length,
+      }
+    );
   } catch (error) {
     // console.error("Error fetching subcategories by category:", error);
     return sendResponse(res, "Error fetching subcategories", 500, false);
@@ -502,7 +566,12 @@ exports.getSubCategoryWithRelatedData = async (req, res) => {
     const { categorySlug, subCategorySlug } = req.params;
 
     if (!categorySlug || !subCategorySlug) {
-      return sendResponse(res, "Category slug and SubCategory slug are required", 400, false);
+      return sendResponse(
+        res,
+        "Category slug and SubCategory slug are required",
+        400,
+        false
+      );
     }
 
     // Find category by slug
@@ -514,60 +583,70 @@ exports.getSubCategoryWithRelatedData = async (req, res) => {
     // Fetch subcategory (to confirm it belongs to the given category)
     const subCat = await SubCategory.findOne({
       slug: subCategorySlug,
-      parentCategory: category._id
+      parentCategory: category._id,
     }).lean();
 
     if (!subCat) {
-      return sendResponse(res, "SubCategory not found for given category", 404, false);
+      return sendResponse(
+        res,
+        "SubCategory not found for given category",
+        404,
+        false
+      );
     }
 
     // Fetch sub-subcategories under this subcategory
     const subSubCategories = await SubSubCategory.find({
-      parentSubCategory: subCat._id
+      parentSubCategory: subCat._id,
     }).lean();
 
     // Fetch products that belong to both category AND subcategory
     const products = await Product.find({
       categories: category._id,
-      subCategories: subCat._id
+      subCategories: subCat._id,
     })
       .select("discountedPrice color variants")
       .lean();
 
     // Format sub-subcategories
-    const formattedSubSubCategories = subSubCategories.map(subSub => ({
+    const formattedSubSubCategories = subSubCategories.map((subSub) => ({
       id: subSub._id,
       name: subSub.name,
-      slug: subSub.slug
+      slug: subSub.slug,
     }));
 
     // Format products
-    const formattedProducts = products.map(prod => ({
+    const formattedProducts = products.map((prod) => ({
       discountedPrice: prod.discountedPrice,
       color: prod.color,
-      sizes: prod.variants?.map(variant => variant.size) || []
+      sizes: prod.variants?.map((variant) => variant.size) || [],
     }));
 
     const response = {
       subCategory: {
         id: subCat._id,
         name: subCat.name,
-        slug: subCat.slug
+        slug: subCat.slug,
       },
       subSubCategories: formattedSubSubCategories,
       products: formattedProducts,
       counts: {
         subSubCategories: formattedSubSubCategories.length,
-        products: formattedProducts.length
-      }
+        products: formattedProducts.length,
+      },
     };
 
-    return sendResponse(res, "SubCategory data retrieved successfully", 200, true, {
-      data: response
-    });
+    return sendResponse(
+      res,
+      "SubCategory data retrieved successfully",
+      200,
+      true,
+      {
+        data: response,
+      }
+    );
   } catch (error) {
     // console.error("Error fetching subCategory data:", error);
     return sendResponse(res, "Error fetching subCategory data", 500, false);
   }
 };
-
