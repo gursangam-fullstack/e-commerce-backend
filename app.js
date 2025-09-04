@@ -40,6 +40,7 @@ app.use('/api/order/webhook', express.raw({ type: 'application/json' }));
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:3002',
+  "http://localhost:5173"
 ];
 
 app.use(

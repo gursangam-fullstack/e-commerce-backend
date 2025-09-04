@@ -1,6 +1,6 @@
 const express = require('express');
 const { userRegistration, verifyTempUser, userLogin, userProfile, userLogout, userChangePassword, userForgotPasswordOtpSender, userVerifyForgotPasswordOtp, googleLogin, getAllUsers } = require('../controllers/userController');
-const { userRegistrationSchema, LoginFormSchema, changePasswordSchema, forgotPasswordOtpSchema, verifyForgotPasswordOtpSchema, verifyUserOtpSchema } = require('../validations/authValidation')
+const { userRegistrationSchema, LoginFormSchema, changePasswordSchema, forgotPasswordOtpSchema, verifyForgotPasswordOtpSchema, verifyUserOtpSchema,  } = require('../validations/authValidation')
 const { accessTokenAutoRefresh } = require('../middlewares/accessTokenAutoRefresh');
 const passport = require('passport');
 const userRouter = express.Router();

@@ -12,7 +12,7 @@ const productModel = require('../model/product');
 require("dotenv").config();
 
 
-console.log("🔑 RAZORPAY_KEY_ID:", process.env.RAZERPAY_API_KEY);
+// console.log("🔑 RAZORPAY_KEY_ID:", process.env.RAZERPAY_API_KEY);
 
 // Initialize Razorpay
 const razorpay = new Razorpay({
