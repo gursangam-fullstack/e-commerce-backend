@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const orderModel = require('../model/order');
 const addressModel = require('../model/address');
 const sendResponse = require('../utils/sendResponse');
+const getPagination = require('../utils/pagination')
 const sendEmailFun = require('../config/sendEmail');
 const productModel = require('../model/product');
 
@@ -195,7 +196,7 @@ exports.createOrderController = async (req, res) => {
             orderId: order._id
         });
     } catch (err) {
-        // console.error('Error creating order:', err);
+         console.error('Error creating order:', err);
         return sendResponse(res, "Error creating order", 500, false);
     }
 };
@@ -391,9 +392,13 @@ exports.getOrdersByUserIdController = async (req, res) => {
             return sendResponse(res, "Invalid user ID", 400, false);
         }
         // pagination code
-        const page = Math.max(1, parseInt(req.query.page)) ;
-        const limit = Math.max(1, parseInt(req.query.limit));
-        const skip = (page - 1) * limit;
+        // const page = Math.max(1, parseInt(req.query.page)) ;
+        // const limit = Math.max(1, parseInt(req.query.limit));
+        // const skip = (page - 1) * limit;
+             const { page, limit, skip } = getPagination(req.query);
+        
+           // const total = await Category.countDocuments();
+            const order= limit
 
         const totalOrders = await orderModel.countDocuments({ userId });
         const orders = await orderModel.find({ userId })
@@ -428,10 +433,15 @@ exports.getOrdersByUserIdController = async (req, res) => {
 exports.getAllOrdersController = async (req, res) => {
     try {
         // Pagination
-        const page = Math.max(1, parseInt(req.query.page)) || 1;
-        const limit = Math.max(1, parseInt(req.query.limit)) || 10;
-        const skip = (page - 1) * limit;
+        // const page = Math.max(1, parseInt(req.query.page)) || 1;
+        // const limit = Math.max(1, parseInt(req.query.limit)) || 10;
+        // const skip = (page - 1) * limit;
 
+
+         const { page, limit, skip } = getPagination(req.query);
+        
+           // const total = await Category.countDocuments();
+            const order= limit
         const totalOrders = await orderModel.countDocuments();
         const orders = await orderModel.find()
             .populate('products.product', '-keyHighlights -specifications')
@@ -460,3 +470,123 @@ exports.getAllOrdersController = async (req, res) => {
         return sendResponse(res, "Error fetching all orders", 500, false);
     }
 }; 
+
+
+
+
+//new code
+exports.getOrderStatus = async (req, res) => {
+  try {
+    // Run all queries in parallel
+    const [orderCounts, productStats] = await Promise.all([
+      // Order counts
+      Promise.all([
+        orderModel.countDocuments(),
+        orderModel.countDocuments({ status: "pending" }),
+        orderModel.countDocuments({ shippingStatus: "delivered" }),
+        orderModel.countDocuments({ shippingStatus: "cancelled" }),
+      ]),
+      // Product stats (total units + distinct products across all orders)
+      orderModel.aggregate([
+        { $unwind: "$products" },
+        {
+          $group: {
+            _id: null,
+            totalUnits: { $sum: "$products.quantity" },       // total quantity sold
+            distinctProducts: { $addToSet: "$products.product" } // unique products
+          }
+        },
+        {
+          $project: {
+            _id: 0,
+            totalUnits: 1,
+            distinctProductsCount: { $size: "$distinctProducts" }
+          }
+        }
+      ])
+    ]);
+
+    const [totalOrders, pendingOrders, deliveredOrders, cancelledOrders] = orderCounts;
+    const { totalUnits = 0, distinctProductsCount = 0 } = productStats[0] || {};
+
+    const result = {
+      totalOrders,
+      pendingOrders,
+      deliveredOrders,
+      cancelledOrders,
+      totalUnits,              // how many items sold in total
+      distinctProductsCount    // how many unique products were ordered
+    };
+
+    return sendResponse(res, "Order status fetched successfully", 200, true, result);
+  } catch (error) {
+    console.error("Error fetching order status", error);
+    return sendResponse(res, "Error fetching order status", 500, false);
+  }
+};
+
+
+
+// Helper: today's range
+const getTodayRange = () => {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+  return { start, end };
+};
+
+exports.getTodayOrderStats = async (req, res) => {
+  try {
+    const { start, end } = getTodayRange();
+
+    const pipeline = [
+      {
+        $match: {
+          createdAt: { $gte: start, $lte: end },
+          shippingStatus: { $in: ["processing", "delivered"] }
+        }
+      },
+      {
+        $group: {
+          _id: "$shippingStatus",
+          count: { $sum: 1 },
+          totalAmount: { $sum: "$amount" }
+        }
+      }
+    ];
+
+    const stats = await orderModel.aggregate(pipeline);
+
+    // Initialize counts
+    let completed = 0;
+    let processing = 0;
+    let totalAmount = 0;
+    let completedOrders = 0;
+
+    stats.forEach(stat => {
+      if (stat._id === "delivered") {
+        completed = stat.count;
+        totalAmount = stat.totalAmount;
+        completedOrders = stat.count;
+      } else if (stat._id === "processing") {
+        processing = stat.count;
+      }
+    });
+
+    // Calculate Average Order Value (AOV)
+    const avgOrderValue =
+      completedOrders > 0 ? (totalAmount / completedOrders).toFixed(2) : 0;
+
+    return sendResponse(res, "Today's order stats", 200, true, {
+      today: {
+        completed,
+        processing,
+        avgOrderValue
+      }
+    });
+  } catch (error) {
+    console.log(error)
+    return sendResponse(res, "Error fetching today's order stats", 500, false);
+  }
+};

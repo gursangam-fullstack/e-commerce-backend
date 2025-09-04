@@ -5,8 +5,10 @@ const fs = require("fs");
 // Import Models
 const Category = require("../model/category");
 const sendResponse = require("../utils/sendResponse");
+const getPagination = require("../utils/pagination")
 const slugify = require("slugify");
 
+const { extractPublicIdFromUrl, cleanupTemporaryFiles } = require("../utils/categoryHelper");
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CONFIG_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_CONFIG_API_KEY,
@@ -15,42 +17,42 @@ cloudinary.config({
 });
 
 // Helper function to extract Cloudinary public_id from URL
-const extractPublicIdFromUrl = (url) => {
-  try {
-    // Parse the URL to get the path
-    const urlParts = url.split('/');
-    // Find the upload part and get everything after it
-    const uploadIndex = urlParts.findIndex(part => part === 'upload');
-    if (uploadIndex !== -1 && uploadIndex + 2 < urlParts.length) {
-      // Get the version and public_id parts
-      const versionAndPublicId = urlParts.slice(uploadIndex + 2).join('/');
-      // Remove the file extension
-      const publicId = versionAndPublicId.split('.')[0];
-      return publicId;
-    }
-    return null;
-  } catch (error) {
-    // console.error("Error extracting public_id from URL:", error);
-    return null;
-  }
-};
+// const extractPublicIdFromUrl = (url) => {
+//   try {
+//     // Parse the URL to get the path
+//     const urlParts = url.split('/');
+//     // Find the upload part and get everything after it
+//     const uploadIndex = urlParts.findIndex(part => part === 'upload');
+//     if (uploadIndex !== -1 && uploadIndex + 2 < urlParts.length) {
+//       // Get the version and public_id parts
+//       const versionAndPublicId = urlParts.slice(uploadIndex + 2).join('/');
+//       // Remove the file extension
+//       const publicId = versionAndPublicId.split('.')[0];
+//       return publicId;
+//     }
+//     return null;
+//   } catch (error) {
+//     // console.error("Error extracting public_id from URL:", error);
+//     return null;
+//   }
+// };
 
-// Helper function to clean up temporary files
-const cleanupTemporaryFiles = (files) => {
-  if (!files || files.length === 0) return;
+// // Helper function to clean up temporary files
+// const cleanupTemporaryFiles = (files) => {
+//   if (!files || files.length === 0) return;
   
-  for (const file of files) {
-    try {
-      const filePath = `uploads/${file.filename}`;
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-        // console.log(`Cleaned up temporary file: ${file.filename}`);
-      }
-    } catch (cleanupError) {
-      // console.error(`Error cleaning up file ${file.filename}:`, cleanupError);
-    }
-  }
-};
+//   for (const file of files) {
+//     try {
+//       const filePath = `uploads/${file.filename}`;
+//       if (fs.existsSync(filePath)) {
+//         fs.unlinkSync(filePath);
+//         // console.log(`Cleaned up temporary file: ${file.filename}`);
+//       }
+//     } catch (cleanupError) {
+//       // console.error(`Error cleaning up file ${file.filename}:`, cleanupError);
+//     }
+//   }
+// };
 
 exports.createCategoryController = async (req, res) => {
   try {
@@ -152,11 +154,13 @@ exports.createCategoryController = async (req, res) => {
 exports.getAllCategories = async (req, res) => {
   try {
     // pagination code
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit);
-    const skip = (page - 1) * (limit || 0);
-    const total = await Category.countDocuments();
+    // const page = parseInt(req.query.page) || 1;
+    // const limit = parseInt(req.query.limit);
+    // const skip = (page - 1) * (limit || 0);
+    // const total = await Category.countDocuments();
+ const { page, limit, skip } = getPagination(req.query);
 
+    const total = await Category.countDocuments();
     const categories = limit
       ? await Category.find().skip(skip).limit(limit)
       : await Category.find();
@@ -179,6 +183,7 @@ exports.getAllCategories = async (req, res) => {
       limit: limit || total
     });
   } catch (error) {
+    console.log(error)
     return sendResponse(res, "Error fetching categories", 500, false);
   }
 };

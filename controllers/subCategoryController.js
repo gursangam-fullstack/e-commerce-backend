@@ -2,6 +2,7 @@ const subCategory = require("../model/subCategory");
 const SubCategory = require("../model/subCategory");
 const slugify = require("slugify");
 const sendResponse = require("../utils/sendResponse");
+const getPagination = require("../utils/pagination")
 const SubSubCategory  = require("../model/subSubCategory");
 const Product  = require("../model/product");
 const Category = require("../model/category");
@@ -160,10 +161,14 @@ exports.createSubCategory = async (req, res) => {
 exports.getAllSubCategories = async (req, res) => {
   try {
     //pagination code
-    const page = parseInt(req.query.page) || 0;
-    const limit = parseInt(req.query.limit) || 0;
-    const skip = (page - 1) * limit;
-    const total = await SubCategory.countDocuments();
+    // const page = parseInt(req.query.page) || 0;
+    // const limit = parseInt(req.query.limit) || 0;
+    // const skip = (page - 1) * limit;
+    // const total = await SubCategory.countDocuments();
+    const { page, limit, skip } = getPagination(req.query);
+    
+        const total = await Category.countDocuments();
+        const subcategories = limit
     //end
     const subCategories = await SubCategory.find()
       .skip(skip)

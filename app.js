@@ -24,6 +24,7 @@ const wishlistRouter = require('./routers/wishlistRouter');
 const reviewRouter = require('./routers/reviewRouter');
 const subCategoryRouter = require('./routers/subCategoryRouter');
 const subSubCategoryRouter = require('./routers/subSubCategoryRouter');
+const dashboardouter = require('./routers/dashboard');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -93,6 +94,7 @@ app.use('/api/address', addressRouter);
 app.use('/api/order', orderRouter);
 app.use('/api/wishlist', wishlistRouter);
 app.use('/api/review', reviewRouter);
+app.use('/api/dashboard',dashboardouter)
 
 // Global error handling middleware
 app.use((error, req, res, next) => {

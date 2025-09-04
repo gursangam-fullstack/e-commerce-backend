@@ -1,7 +1,8 @@
 const Wishlist = require('../model/wishlist');
 const Product = require('../model/product');
-const User = require('../model/user');
+const userModel = require("../model/User");
 const sendResponse = require('../utils/sendResponse');
+const getPagination = require ('../utils/pagination')
 
 // Add product to wishlist
 exports.addToWishlist = async (req, res) => {
@@ -85,9 +86,11 @@ exports.removeFromWishlist = async (req, res) => {
 exports.getWishlist = async (req, res) => {
     try {
         const { userId } = req.params;
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 12;
-        const skip = (page - 1) * limit;
+        // const page = parseInt(req.query.page) || 1;
+        // const limit = parseInt(req.query.limit) || 12;
+        // const skip = (page - 1) * limit;
+
+               const { page, limit, skip } = getPagination(req.query);
 
         const wishlist = await Wishlist.findOne({ user: userId })
             .populate({

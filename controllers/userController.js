@@ -5,6 +5,7 @@ const bcrypt = require('bcrypt')
 const { generateOtp } = require("../utils/generateOtp"); // ✅ Correct
 
 const sendEmailFun = require('../config/sendEmail')
+const getPagination = require ('../utils/pagination')
 const VerificationEmail = require('../utils/verifyEmailTemplate')
 const tempUser = require('../model/tempUser');
 const { generateTokens } = require("../utils/generateTokens");
@@ -324,9 +325,14 @@ exports.userProfile = async (req, res) => {
 exports.getAllUsers = async (req, res) => {
     try {
         // pagination
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 5;
-        const skip = (page - 1) * limit;
+        // const page = parseInt(req.query.page) || 1;
+        // const limit = parseInt(req.query.limit) || 5;
+        // const skip = (page - 1) * limit;
+
+        const { page, limit, skip } = getPagination(req.query);
+
+  
+    //const categories = limit
         const total = await userModel.countDocuments();
         const users = await userModel.find().skip(skip).limit(limit);
 
