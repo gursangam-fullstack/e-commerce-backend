@@ -102,56 +102,6 @@ exports.createAddressController = async (req, res) => {
   }
 };
 
-// Get address by id
-exports.getAddressById = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 5;
-    const skip = (page - 1) * limit;
-
-    // Validate userId
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return sendResponse(res, "Invalid user ID", 400, false);
-    }
-
-    // Fetch total count
-    const total = await Address.countDocuments({ user: userId });
-
-    // Fetch paginated addresses
-    const addresses = await Address.find({ user: userId })
-      .skip(skip)
-      .limit(limit)
-      .lean(); 
-
-    // Transform addresses (optional - in case you want to hide fields)
-    const updatedAddresses = addresses.map((addr) => ({
-      id: addr._id,
-      fullName: addr.fullName,
-      phone: addr.phone,
-      street: addr.street,
-      city: addr.city,
-      state: addr.state,
-      postalCode: addr.postalCode,
-      country: addr.country,
-      isDefault: addr.isDefault || false,
-    }));
-
-    // Calculate hasMore
-    const hasMore = limit > 0 ? page * limit < total : false;
-
-    return sendResponse(res, "Addresses retrieved successfully", 200, true, {
-      data: updatedAddresses,
-      total,
-      page,
-      limit,
-      hasMore,
-    });
-  } catch (error) {
-    return sendResponse(res, "Error fetching addresses", 500, false);
-  }
-};
-
 // Update address
 exports.updateAddress = async (req, res) => {
   try {
@@ -244,5 +194,55 @@ exports.deleteAddress = async (req, res) => {
     return sendResponse(res, "Address deleted successfully", 200, true);
   } catch (error) {
     return sendResponse(res, "Error deleting address", 500, false);
+  }
+};
+
+// Get address by id
+exports.getAddressById = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 5;
+    const skip = (page - 1) * limit;
+
+    // Validate userId
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return sendResponse(res, "Invalid user ID", 400, false);
+    }
+
+    // Fetch total count
+    const total = await Address.countDocuments({ user: userId });
+
+    // Fetch paginated addresses
+    const addresses = await Address.find({ user: userId })
+      .skip(skip)
+      .limit(limit)
+      .lean(); 
+
+    // Transform addresses (optional - in case you want to hide fields)
+    const updatedAddresses = addresses.map((addr) => ({
+      id: addr._id,
+      fullName: addr.fullName,
+      phone: addr.phone,
+      street: addr.street,
+      city: addr.city,
+      state: addr.state,
+      postalCode: addr.postalCode,
+      country: addr.country,
+      isDefault: addr.isDefault || false,
+    }));
+
+    // Calculate hasMore
+    const hasMore = limit > 0 ? page * limit < total : false;
+
+    return sendResponse(res, "Addresses retrieved successfully", 200, true, {
+      data: updatedAddresses,
+      total,
+      page,
+      limit,
+      hasMore,
+    });
+  } catch (error) {
+    return sendResponse(res, "Error fetching addresses", 500, false);
   }
 };
