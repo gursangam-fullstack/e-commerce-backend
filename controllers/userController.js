@@ -1,326 +1,365 @@
 const sendResponse = require("../utils/sendResponse");
-
 const bcrypt = require('bcrypt')
-
-const { generateOtp } = require("../utils/generateOtp"); // ✅ Correct
-
+const { generateOtp } = require("../utils/generateOtp");
 const sendEmailFun = require('../config/sendEmail')
 const getPagination = require ('../utils/pagination')
 const VerificationEmail = require('../utils/verifyEmailTemplate')
 const tempUser = require('../model/tempUser');
 const { generateTokens } = require("../utils/generateTokens");
 const { setTokensCookies } = require("../utils/setTokensCookies");
-const userRefreshTokenModel = require('../model/userRefreshToken');
+const userRefreshTokenModel = require("../model/userRefreshToken");
 const { OAuth2Client } = require("google-auth-library");
 const userModel = require("../model/User");
-
-const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
-
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // user registration
 exports.userRegistration = async (req, res) => {
-    const { name, email, mobile, password } = req.body;
-//console.log( "request.body", name, email, mobile, password);
+  const { name, email, mobile, password } = req.body;
 
-    try {
-
-        const existingUser = await userModel.findOne({ email });
-        if (existingUser) {
-            return sendResponse(res, "User already exists", 400, false);
-        }
-
-        const salt = await bcrypt.genSalt(Number(process.env.SALT));
-        const hashedPassword = await bcrypt.hash(password, salt);
-
-        const { otp, otpExpiresAt } = generateOtp(10);
-          console.log(otp, otpExpiresAt,"otp, otpExpiresAt");
-          
-        await tempUser.findOneAndUpdate(
-            { email },
-            { name, email, mobile, passwordHash: hashedPassword, otp, otpExpiresAt },
-            { upsert: true, new: true }
-        );
-
-        console.log(`OTP for ${email}: ${otp} ${name}`);
-
-        sendEmailFun({
-            to: email,
-            subject: "Verify Your Email - Ecommerce",      
-            text: "test",
-            html: VerificationEmail(name, otp),
-        }).catch(err => {
-            console.error("Failed to send email:", err);
-        });
-
-        return sendResponse(res, "OTP sent successfully", 200, true);
-    } catch (err) {
-        console.error("Error in user registration:", err);
-        return sendResponse(res, "Unable to register please try again later", 500, false);
+  try {
+    const existingUser = await userModel.findOne({ email });
+    if (existingUser) {
+      return sendResponse(res, "User already exists", 400, false);
     }
-};
 
+    const salt = await bcrypt.genSalt(Number(process.env.SALT));
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    const { otp, otpExpiresAt } = generateOtp(10);
+    // console.log(otp, otpExpiresAt, "otp, otpExpiresAt");
+
+    await tempUser.findOneAndUpdate(
+      { email },
+      { name, email, mobile, passwordHash: hashedPassword, otp, otpExpiresAt },
+      { upsert: true, new: true }
+    );
+
+    // console.log(`OTP for ${email} : ${otp} ${name}`);
+
+    sendEmailFun({
+      to: email,
+      subject: "Email Verification",
+      text: "test",
+      html: VerificationEmail(name, otp),
+    }).catch((err) => {
+      console.error("Failed to send email:", err);
+    });
+
+    return sendResponse(res, "OTP sent successfully", 200, true);
+  } catch (err) {
+    console.error("Error in user registration:", err);
+    return sendResponse(
+      res,
+      "Unable to register please try again later",
+      500,
+      false
+    );
+  }
+};
 
 // user Email Verification
 exports.verifyTempUser = async (req, res) => {
-    const { email, otp } = req.body;
-    console.log("verifyTempUser called with:", { email, otp });
-  
-    try {
+  const { email, otp } = req.body;
+  //   console.log("verifyTempUser called with:", { email, otp });
+    // console.log("request user:", req.user);
 
-      const tempUserData = await tempUser.findOne({ email });
-  
-      if (!tempUserData) {
-        return sendResponse(res, "User not found or OTP expired", 400, false);
-      }
-  
-      // Compare OTP as string
-      if (tempUserData.otp !== otp.toString()) {
-        return sendResponse(res, "Invalid OTP", 400, false);
-      }
-  
-      // Check expiry
-      if (tempUserData.otpExpiresAt < new Date()) {
-        return sendResponse(res, "OTP has expired", 400, false);
-      }
-  
-      // Create user in main collection
-      await new userModel({
-        name: tempUserData.name,
-        email: tempUserData.email,
-        mobile: tempUserData.mobile,
-        password: tempUserData.passwordHash,
-      }).save();
-  
-      // Delete temp record
-      await tempUser.deleteOne({ email });
-  
-      return sendResponse(res, "Email verified", 200, true);
+  try {
+    const tempUserData = await tempUser.findOne({ email });
 
-    } catch (err) {
-      console.error("Error in verifyTempUser:", err);
-      return sendResponse(res, "Unable to verify OTP. Please try again later.", 500, false);
+    if (!tempUserData) {
+      return sendResponse(res, "OTP expired", 400, false);
     }
-  };
-  
+
+    // Compare OTP as string
+    if (tempUserData.otp !== otp.toString()) {
+      return sendResponse(res, "Invalid OTP", 400, false);
+    }
+
+    // Create user in main collection
+    await new userModel({
+      name: tempUserData.name,
+      email: tempUserData.email,
+      mobile: tempUserData.mobile,
+      password: tempUserData.passwordHash,
+      isVerified: true,
+    }).save();
+
+    // Delete temp record
+    await tempUser.deleteOne({ email });
+
+    return sendResponse(res, "Email verified", 200, true);
+  } catch (err) {
+    // console.error("Error in verifyTempUser:", err);
+    return sendResponse(
+      res,
+      "Unable to verify OTP. Please try again later.",
+      500,
+      false
+    );
+  }
+};
+
 // user login
 exports.userLogin = async (req, res) => {
-    try {
-        const { email, password } = req.body;
+  try {
+    const { email, password } = req.body;
 
-        const user = await userModel.findOne({ email });
-        if (!user) {
-            return sendResponse(res, "Invalid email or password", 404, false)
-        }
-
-        const isMatchPassword = await bcrypt.compare(password, user.password);
-        if (!isMatchPassword) {
-            return sendResponse(res, "Invalid email or password", 401, false)
-        }
-
-        //generate token
-        let tokens;
-        try {
-            tokens = await generateTokens(user);
-        } catch (err) {
-            // console.log(err);
-            return sendResponse(res, "Unable to create access or refresh token", 500, false);
-        }
-        const { accessToken, refreshToken, accessTokenExp, refreshTokenExp } = tokens;
-
-        // set cookies
-        setTokensCookies(res, accessToken, refreshToken, accessTokenExp, refreshTokenExp);
-
-        //send success response with tokens
-        return sendResponse(res, "Login Successfully", 200, true,
-            {
-                user: { email: user.email, name: user.name },
-                is_auth: true
-            }
-        )
-
-    } catch (error) {
-        // console.log(error);
-        sendResponse(res, "Unable to Login please try again later", 500, false)
+    const user = await userModel.findOne({ email });
+    if (!user) {
+      return sendResponse(res, "Invalid email or password", 404, false);
     }
-}
+
+    const isMatchPassword = await bcrypt.compare(password, user.password);
+    if (!isMatchPassword) {
+      return sendResponse(res, "Invalid email or password", 401, false);
+    }
+
+    //generate token
+    let tokens;
+    try {
+      tokens = await generateTokens(user);
+    } catch (err) {
+      // console.log(err);
+      return sendResponse(
+        res,
+        "Unable to create access or refresh token",
+        500,
+        false
+      );
+    }
+    const { accessToken, refreshToken, accessTokenExp, refreshTokenExp } =
+      tokens;
+
+    // set cookies
+    setTokensCookies(
+      res,
+      accessToken,
+      refreshToken,
+      accessTokenExp,
+      refreshTokenExp
+    );
+
+    //send success response with tokens
+    return sendResponse(res, "Login Successfully", 200, true, {
+      user: { email: user.email, name: user.name },
+      is_auth: true,
+    });
+  } catch (error) {
+    // console.log(error);
+    sendResponse(res, "Unable to Login please try again later", 500, false);
+  }
+};
 
 // user logout
 exports.userLogout = async (req, res) => {
-    try {
-        // Remove refresh token from DB if user is authenticated
-        if (req.user && req.user.id) {
-            await userRefreshTokenModel.deleteMany({ userId: req.user.id });
-        } else if (req.body && req.body.userId) {
-            await userRefreshTokenModel.deleteMany({ userId: req.body.userId });
-        }
-        res.clearCookie('accessToken', { httpOnly: true, sameSite: 'strict' });
-        res.clearCookie('refreshToken', { httpOnly: true, sameSite: 'strict' });
-        res.clearCookie('is_auth', { sameSite: 'strict' });
-        return sendResponse(res, "Logout successful", 200, true);
-    } catch (error) {
-        // console.log(error);
-        return sendResponse(res, "Unable to Logout please try again later", 500, false);
+  try {
+    // Remove refresh token from DB if user is authenticated
+    if (req.user && req.user.id) {
+      await userRefreshTokenModel.deleteMany({ userId: req.user.id });
+    } else if (req.body && req.body.userId) {
+      await userRefreshTokenModel.deleteMany({ userId: req.body.userId });
     }
-}
+    res.clearCookie("accessToken", { httpOnly: true, sameSite: "strict" });
+    res.clearCookie("refreshToken", { httpOnly: true, sameSite: "strict" });
+    res.clearCookie("is_auth", { sameSite: "strict" });
+    return sendResponse(res, "Logout successful", 200, true);
+  } catch (error) {
+    // console.log(error);
+    return sendResponse(
+      res,
+      "Unable to Logout please try again later",
+      500,
+      false
+    );
+  }
+};
 
 // change password
 exports.userChangePassword = async (req, res) => {
-    try {
-        // console.log("Change password request body:", req.body);
-        // console.log("Authenticated user ID:", req.user?._id);
+  try {
+    const { oldPassword, newPassword } = req.body;
 
-        const { password } = req.body;
-
-        // if (password !== password_confirmation) {
-        //     return sendResponse(res, "New Password and Confirm New Password don't match");
-        // }
-
-        const salt = await bcrypt.genSalt(Number(process.env.SALT || 10));
-        const newHashedPassword = await bcrypt.hash(password, salt);
-
-        await userModel.findByIdAndUpdate(req.user._id, {
-            $set: {
-                password: newHashedPassword,
-            },
-        });
-
-        return sendResponse(res, "Password changed successfully", 200, true);
-    } catch (error) {
-        console.error("Error in userChangePassword:", error);
-        return sendResponse(res, "Unable to Change Password please try again later", 500, false);
+    if (!req.user || !req.user._id) {
+      return sendResponse(res, "User not authenticated", 401, false);
     }
+
+    // Get user from DB
+    const user = await userModel.findById(req.user._id);
+    if (!user) {
+      return sendResponse(res, "User not found", 404, false);
+    }
+
+    // Compare old password
+    const isMatch = await bcrypt.compare(oldPassword, user.password);
+    if (!isMatch) {
+      return sendResponse(res, "Old password is incorrect", 400, false);
+    }
+
+    // Hash new password
+    const salt = await bcrypt.genSalt(Number(process.env.SALT || 10));
+    const newHashedPassword = await bcrypt.hash(newPassword, salt);
+
+    // Update password
+    await userModel.findByIdAndUpdate(user._id, {
+      $set: { password: newHashedPassword },
+    });
+
+    return sendResponse(res, "Password changed successfully", 200, true);
+  } catch (error) {
+    console.error("Error in userChangePassword:", error);
+    return sendResponse(
+      res,
+      "Unable to change password, please try again later",
+      500,
+      false
+    );
+  }
 };
 
 // forget password
 exports.userForgotPasswordOtpSender = async (req, res) => {
-    // console.log("forgotPasswordOtpSender",req.body)
-    try {
-        const { email } = req.body;
+  // console.log("forgotPasswordOtpSender",req.body)
+  try {
+    const { email } = req.body;
 
-        const user = await userModel.findOne({ email });
-        if (!user) {
-            return sendResponse(res, "User not found", 404, false);
-        }
-
-        const { otp, otpExpiresAt } = generateOtp(10);
-
-        await tempUser.findOneAndUpdate(
-            { email },
-            { otp, otpExpiresAt },
-            { upsert: true, new: true }
-        );
-
-        console.log(`OTP for ${email}: ${otp} ${user.name}`);
-
-        sendEmailFun({
-            to: email,
-            subject: "Forgot Password OTP",
-            text: "test",
-            html: VerificationEmail(user.name, otp),
-        });
-
-        return sendResponse(res, "OTP sent successfully", 200, true);
-    } catch (error) {
-        console.error("Forgot Password Error:", error);
-        return sendResponse(res, "Internal server error", 500, false);
+    const user = await userModel.findOne({ email });
+    if (!user) {
+      return sendResponse(res, "User not found", 404, false);
     }
+
+    const { otp, otpExpiresAt } = generateOtp(10);
+
+    await tempUser.findOneAndUpdate(
+      { email },
+      { otp, otpExpiresAt },
+      { upsert: true, new: true }
+    );
+
+    console.log(`OTP for ${email}: ${otp} ${user.name}`);
+
+    sendEmailFun({
+      to: email,
+      subject: "Forgot Password OTP",
+      text: "test",
+      html: VerificationEmail(user.name, otp),
+    });
+
+    return sendResponse(res, "OTP sent successfully", 200, true);
+  } catch (error) {
+    console.error("Forgot Password Error:", error);
+    return sendResponse(res, "Internal server error", 500, false);
+  }
 };
 
 //verify forget password
 exports.userVerifyForgotPasswordOtp = async (req, res) => {
-    try {
-        const { email, otp, newPassword, confirmPassword } = req.body;
+  try {
+    const { email, otp, newPassword, confirmPassword } = req.body;
 
-        const checkTempUser = await tempUser.findOne({ email });
-        if (!checkTempUser || checkTempUser.otp !== otp || checkTempUser.otpExpiresAt < new Date()) {
-            return sendResponse(res, "Invalid or expired OTP", 400, false);
-        }
-
-        if (newPassword !== confirmPassword) {
-            return sendResponse(res, "New password and confirm password do not match", 400, false);
-        }
-
-        const user = await userModel.findOne({ email });
-        if (!user) {
-            return sendResponse(res, "User not found", 404, false);
-        }
-
-        const salt = await bcrypt.genSalt(Number(process.env.SALT));
-        user.password = await bcrypt.hash(newPassword, salt);
-        await user.save();
-        await tempUser.deleteOne({ email });
-
-        return sendResponse(res, "Password updated successfully", 200, true);
-    } catch (error) {
-        console.error("Verify Forgot Password OTP Error:", error);
-        return sendResponse(res, "Internal server error", 500, false);
+    const checkTempUser = await tempUser.findOne({ email });
+    if (
+      !checkTempUser ||
+      checkTempUser.otp !== otp ||
+      checkTempUser.otpExpiresAt < new Date()
+    ) {
+      return sendResponse(res, "Invalid or expired OTP", 400, false);
     }
+
+    if (newPassword !== confirmPassword) {
+      return sendResponse(
+        res,
+        "New password and confirm password do not match",
+        400,
+        false
+      );
+    }
+
+    const user = await userModel.findOne({ email });
+    if (!user) {
+      return sendResponse(res, "User not found", 404, false);
+    }
+
+    const salt = await bcrypt.genSalt(Number(process.env.SALT));
+    user.password = await bcrypt.hash(newPassword, salt);
+    await user.save();
+    await tempUser.deleteOne({ email });
+
+    return sendResponse(res, "Password updated successfully", 200, true);
+  } catch (error) {
+    console.error("Verify Forgot Password OTP Error:", error);
+    return sendResponse(res, "Internal server error", 500, false);
+  }
 };
 
-//google login 
+//google login
 exports.googleLogin = async (req, res) => {
-    const { idToken } = req.body;
-    // console.log("Received ID Token:", idToken?.substring(0, 50) + "...");
-    if (!idToken) {
-        // console.log("No token provided");
-        return sendResponse(res, "idToken is required", 400, false);
+  const { idToken } = req.body;
+  // console.log("Received ID Token:", idToken?.substring(0, 50) + "...");
+  if (!idToken) {
+    // console.log("No token provided");
+    return sendResponse(res, "idToken is required", 400, false);
+  }
+
+  try {
+    // Verify Google ID token
+    const ticket = await client.verifyIdToken({
+      idToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    // console.log("Token verified. Payload:", payload);
+    const userInfo = {
+      name: payload.name,
+      email: payload.email,
+      googleId: payload.sub,
+    };
+
+    // Check if user exists
+    let user = await userModel.findOne({ email: userInfo.email });
+
+    // If not, create user with no password (Google login only)
+    if (!user) {
+      user = await userModel.create({
+        name: userInfo.name,
+        email: userInfo.email,
+        password: null,
+        isVerified: true,
+        googleId: userInfo.googleId,
+      });
+      // console.log("New user created in DB:", user);
     }
 
-    try {
-        // Verify Google ID token
-        const ticket = await client.verifyIdToken({
-            idToken,
-            audience: process.env.GOOGLE_CLIENT_ID,
-        });
+    // Generate tokens
+    const tokens = await generateTokens(user);
+    const { accessToken, refreshToken, accessTokenExp, refreshTokenExp } =
+      tokens;
 
-        const payload = ticket.getPayload();
-        // console.log("Token verified. Payload:", payload);
-        const userInfo = {
-            name: payload.name,
-            email: payload.email,
-            googleId: payload.sub,
-        };
+    // Set cookies
+    setTokensCookies(
+      res,
+      accessToken,
+      refreshToken,
+      accessTokenExp,
+      refreshTokenExp
+    );
 
-        // Check if user exists
-        let user = await userModel.findOne({ email: userInfo.email });
-
-        // If not, create user with no password (Google login only)
-        if (!user) {
-            user = await userModel.create({
-                name: userInfo.name,
-                email: userInfo.email,
-                password: null,
-                isVerified: true,
-                googleId: userInfo.googleId,
-            });
-            // console.log("New user created in DB:", user);
-        }
-
-        // Generate tokens
-        const tokens = await generateTokens(user);
-        const { accessToken, refreshToken, accessTokenExp, refreshTokenExp } = tokens;
-
-        // Set cookies
-        setTokensCookies(res, accessToken, refreshToken, accessTokenExp, refreshTokenExp);
-
-        return sendResponse(res, "Google login successful", 200, true, {
-            user: {
-                name: user.name,
-                email: user.email,
-            },
-
-        });
-
-    } catch (error) {
-        console.error("Google login error:", error.message);
-        return sendResponse(res, "Invalid or expired Google token", 401, false);
-    }
+    return sendResponse(res, "Google login successful", 200, true, {
+      user: {
+        name: user.name,
+        email: user.email,
+      },
+    });
+  } catch (error) {
+    console.error("Google login error:", error.message);
+    return sendResponse(res, "Invalid or expired Google token", 401, false);
+  }
 };
 
-//userprofile
+// get user details
 exports.userProfile = async (req, res) => {
-    res.send({ "user": req.user })
-}
+  const userId = req.user ? req.user._id : null;
+  // console.log("Authenticated user ID:", userId);
 
 exports.getAllUsers = async (req, res) => {
     try {
@@ -353,34 +392,67 @@ exports.getAllUsers = async (req, res) => {
     } catch (error) {
         console.error("Get All Users Error:", error);
         return sendResponse(res, "Internal server error", 500, false);
-    }
+
 };
 
+// all users
+exports.getAllUsers = async (req, res) => {
+  try {
+    // pagination
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 5;
+    const skip = (page - 1) * limit;
+    const total = await userModel.countDocuments();
+    const users = await userModel.find().skip(skip).limit(limit);
+
+    // Map each user to the required response format
+    const userList = users.map((user) => ({
+      id: user._id,
+      slug: user.name || user.slug, // adjust as per your user schema
+      email: user.email,
+      mobile: user.mobile,
+    }));
+
+    return sendResponse(res, "Users fetched successfully", 200, true, {
+      users: userList,
+      page,
+      limit,
+      total,
+    });
+  } catch (error) {
+    console.error("Get All Users Error:", error);
+    return sendResponse(res, "Internal server error", 500, false);
+  }
+};
+
+// get user by id
 exports.getUserById = async (req, res) => {
-    try {
-        const { id } = req.params;
+  try {
+    const { id } = req.params;
 
-        // Validate ID presence
-        if (!id) {
-            return sendResponse(res, "User ID is required", 400, false);
-        }
-
-        const user = await userModel.findById(id);
-
-        if (!user) {
-            return sendResponse(res, "User not found", 404, false);
-        }
-
-        const userData = {
-            id: user._id,
-            slug: user.name || user.slug,
-            email: user.email,
-            mobile: user.mobile,
-        };
-
-        return sendResponse(res, "User fetched successfully", 200, true, { user: userData });
-    } catch (error) {
-        console.error("Get User By ID Error:", error);
-        return sendResponse(res, "Internal server error", 500, false);
+    // Validate ID presence
+    if (!id) {
+      return sendResponse(res, "User ID is required", 400, false);
     }
+
+    const user = await userModel.findById(id);
+
+    if (!user) {
+      return sendResponse(res, "User not found", 404, false);
+    }
+
+    const userData = {
+      id: user._id,
+      slug: user.name || user.slug,
+      email: user.email,
+      mobile: user.mobile,
+    };
+
+    return sendResponse(res, "User fetched successfully", 200, true, {
+      user: userData,
+    });
+  } catch (error) {
+    console.error("Get User By ID Error:", error);
+    return sendResponse(res, "Internal server error", 500, false);
+  }
 };

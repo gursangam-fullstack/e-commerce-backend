@@ -34,6 +34,11 @@ const userRegistrationSchema = z.object({
     ),
 });
 
+const verifyUserOtpSchema = z.object({
+  email: z.string().nonempty("Email is required").email("Invalid email address"),
+  otp: otpSchema,
+})
+
 const LoginFormSchema = z.object({
   email: z
     .string()
@@ -52,20 +57,24 @@ const LoginFormSchema = z.object({
 })
 
 const changePasswordSchema = z.object({
-  password: z
+  oldPassword: z
+    .string()
+    .nonempty("Old password is required"),
+
+  newPassword: z
     .string()
     .nonempty("New password is required")
     .min(8, "Password must be at least 8 characters long")
     .regex(
       /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?#&_])[A-Za-z\d@$!%*?#&_]{8,}$/,
-      "Password must include uppercase, lowercase, number, and special character"
+      "Password must include at least one uppercase letter, one lowercase letter, one number, and one special character"
     ),
 
-  password_confirmation: z
+  confirmPassword: z
     .string()
     .nonempty("Confirm password is required"),
-}).refine((data) => data.password === data.password_confirmation, {
-  path: ['password_confirmation'],
+}).refine((data) => data.newPassword === data.confirmPassword, {
+  path: ["confirmPassword"],
   message: "New password and confirm password do not match",
 });
 
@@ -75,11 +84,6 @@ const forgotPasswordOtpSchema = z.object({
     .nonempty("Email is required")
     .email("Invalid email address"),
 });
-
-const verifyUserOtpSchema = z.object({
-  email: z.string().nonempty("Email is required").email("Invalid email address"),
-  otp: otpSchema,
-})
 
 const verifyForgotPasswordOtpSchema = z.object({
   email: z

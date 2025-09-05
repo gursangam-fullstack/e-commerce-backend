@@ -35,11 +35,14 @@ const auth = async (req, res, next) => {
         req.user = {
             id: decoded.id,
             email: decoded.email,
-            role: decoded.role
+            role: decoded.role,
+            name: decoded.name,
+            mobile: decoded.mobile,
+            isVerified: decoded.isVerified
         };
 
         next();
-
+ 
     } catch (error) {
         // console.error("Auth Middleware Error:", error);
         return res.status(401).json({
