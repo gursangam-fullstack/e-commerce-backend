@@ -2,6 +2,7 @@ const sendResponse = require("../utils/sendResponse");
 const bcrypt = require("bcrypt");
 const { generateOtp } = require("../utils/generateOtp");
 const sendEmailFun = require("../config/sendEmail");
+const getPagination = require("../utils/pagination");
 const VerificationEmail = require("../utils/verifyEmailTemplate");
 const tempUser = require("../model/tempUser");
 const { generateTokens } = require("../utils/generateTokens");
@@ -60,7 +61,7 @@ exports.userRegistration = async (req, res) => {
 exports.verifyTempUser = async (req, res) => {
   const { email, otp } = req.body;
   //   console.log("verifyTempUser called with:", { email, otp });
-    // console.log("request user:", req.user);
+  // console.log("request user:", req.user);
 
   try {
     const tempUserData = await tempUser.findOne({ email });
@@ -383,6 +384,39 @@ exports.userProfile = async (req, res) => {
     });
   } catch (error) {
     console.error("Get User Profile Error:", error);
+    return sendResponse(res, "Internal server error", 500, false);
+  }
+};
+
+exports.getAllUsers = async (req, res) => {
+  try {
+    // pagination
+    // const page = parseInt(req.query.page) || 1;
+    // const limit = parseInt(req.query.limit) || 5;
+    // const skip = (page - 1) * limit;
+
+    const { page, limit, skip } = getPagination(req.query);
+
+    //const categories = limit
+    const total = await userModel.countDocuments();
+    const users = await userModel.find().skip(skip).limit(limit);
+
+    // Map each user to the required response format
+    const userList = users.map((user) => ({
+      id: user._id,
+      slug: user.name || user.slug, // adjust as per your user schema
+      email: user.email,
+      mobile: user.mobile,
+    }));
+
+    return sendResponse(res, "Users fetched successfully", 200, true, {
+      users: userList,
+      page,
+      limit,
+      total,
+    });
+  } catch (error) {
+    console.error("Get All Users Error:", error);
     return sendResponse(res, "Internal server error", 500, false);
   }
 };

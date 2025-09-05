@@ -74,7 +74,10 @@ const productSchema = new mongoose.Schema({
   weight: { type: String },
   discountedPrice: { type: Number },
   color: { type: String, required: true },
-  gender: { type: String, required: true, enum: ['male', 'female', 'unisex'] },
+  gender: { type: String, required: true, enum: ['male', 'female', 'unisex'] ,
+    //update
+      default: 'unisex'
+  },
   images: [String],
   variants: [variantSchema],
   keyHighlights: keyHighlightsSchema,

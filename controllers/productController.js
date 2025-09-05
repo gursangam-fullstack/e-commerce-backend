@@ -2,6 +2,7 @@ const Product = require("../model/product");
 const Review = require("../model/review");
 const _ = require('lodash');
 const sendResponse = require("../utils/sendResponse");
+const getPagination = require("../utils/pagination")
 const slugify = require("slugify");
 const Category = require("../model/category");
 const SubCategory = require("../model/subCategory");
@@ -268,10 +269,13 @@ exports.createProduct = async (req, res) => {
 exports.getAllProducts = async (req, res) => {
   try {
     // pagination start
-    const page = parseInt(req.query.page) ;
-    const limit = parseInt(req.query.limit) ;
-    const skip = (page - 1) * limit;
+    // const page = parseInt(req.query.page) ;
+    // const limit = parseInt(req.query.limit) ;
+    // const skip = (page - 1) * limit;
+ const { page, limit, skip } = getPagination(req.query);
 
+    //const total = await Category.countDocuments();
+    const product = limit
     const total = await Product.countDocuments();
 
     const products = await Product.find()
@@ -313,7 +317,7 @@ exports.getAllProducts = async (req, res) => {
       limit
     });
   } catch (error) {
-    // console.error("Get All Products Error:", error);
+    console.error("Get All Products Error:", error);
     return sendResponse(res, "Error fetching products", 500, false);
   }
 };
@@ -661,9 +665,13 @@ exports.getProductById = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user?._id; // Optional - user might not be logged in
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 5;
-    const skip = (page - 1) * limit;
+    // const page = parseInt(req.query.page) || 1;
+    // const limit = parseInt(req.query.limit) || 5;
+    // const skip = (page - 1) * limit;
+    const { page, limit, skip } = getPagination(req.query);
+
+    //const total = await Category.countDocuments();
+   
 
     const product = await Product.findById(id)
       .populate("categories", "name slug")

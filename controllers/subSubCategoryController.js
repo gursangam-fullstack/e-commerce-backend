@@ -1,6 +1,7 @@
 const SubSubCategory = require("../model/subSubCategory");
 const slugify = require("slugify");
 const sendResponse = require("../utils/sendResponse");
+const getPagination = require("../utils/pagination")
 const SubCategory = require("../model/subCategory");
 const Product  = require("../model/product");
 const Category = require("../model/category");
@@ -178,10 +179,14 @@ exports.getSubSubCategoryById = async (req, res) => {
 // get all
 exports.getAllSubSubCategories = async (req, res) => {
   try {
-    // adding pagination
-    const page = parseInt(req.query.page) || 0;
-    const limit = parseInt(req.query.limit) || 0;
-    const skip = (page - 1) * limit;
+    //adding pagination
+    // const page = parseInt(req.query.page) || 0;
+    // const limit = parseInt(req.query.limit) || 0;
+    // const skip = (page - 1) * limit;
+
+        const { page, limit, skip } = getPagination(req.query);
+        
+//console.log("Pagination params:", page, limit, skip); // check values
     const total = await SubSubCategory.countDocuments();
 
     const subSubCategories = await SubSubCategory.find()
@@ -240,7 +245,7 @@ exports.getAllSubSubCategories = async (req, res) => {
       limit
     });
   } catch (error) {
-    // console.error("Error fetching sub-subcategories:", error);
+    //console.error("Error fetching sub-subcategories:", error);
     return sendResponse(res, "Error fetching sub-subcategories", 500, false);
   }
 };
