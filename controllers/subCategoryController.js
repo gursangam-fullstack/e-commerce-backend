@@ -2,8 +2,11 @@ const subCategory = require("../model/subCategory");
 const SubCategory = require("../model/subCategory");
 const slugify = require("slugify");
 const sendResponse = require("../utils/sendResponse");
-const SubSubCategory = require("../model/subSubCategory");
-const Product = require("../model/product");
+
+const getPagination = require("../utils/pagination")
+const SubSubCategory  = require("../model/subSubCategory");
+const Product  = require("../model/product");
+
 const Category = require("../model/category");
 const cloudinary = require("cloudinary").v2;
 const fs = require("fs");
@@ -184,13 +187,18 @@ exports.createSubCategory = async (req, res) => {
 // get all products
 exports.getAllSubCategories = async (req, res) => {
   try {
-    // pagination
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 0;
-    const skip = (page - 1) * limit;
-    const total = await SubCategory.countDocuments();
 
-    console.log("limit", limit);
+    //pagination code
+    // const page = parseInt(req.query.page) || 0;
+    // const limit = parseInt(req.query.limit) || 0;
+    // const skip = (page - 1) * limit;
+    // const total = await SubCategory.countDocuments();
+    const { page, limit, skip } = getPagination(req.query);
+    
+        const total = await Category.countDocuments();
+        const subcategories = limit
+    //end
+
 
     const subCategories = await SubCategory.find()
       .skip(skip)

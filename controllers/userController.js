@@ -1,9 +1,10 @@
 const sendResponse = require("../utils/sendResponse");
-const bcrypt = require("bcrypt");
+const bcrypt = require('bcrypt')
 const { generateOtp } = require("../utils/generateOtp");
-const sendEmailFun = require("../config/sendEmail");
-const VerificationEmail = require("../utils/verifyEmailTemplate");
-const tempUser = require("../model/tempUser");
+const sendEmailFun = require('../config/sendEmail')
+const getPagination = require ('../utils/pagination')
+const VerificationEmail = require('../utils/verifyEmailTemplate')
+const tempUser = require('../model/tempUser');
 const { generateTokens } = require("../utils/generateTokens");
 const { setTokensCookies } = require("../utils/setTokensCookies");
 const userRefreshTokenModel = require("../model/userRefreshToken");
@@ -360,31 +361,38 @@ exports.userProfile = async (req, res) => {
   const userId = req.user ? req.user._id : null;
   // console.log("Authenticated user ID:", userId);
 
-  try {
-    if (!userId) {
-      return sendResponse(res, "User not authenticated", 401, false);
-    }
+exports.getAllUsers = async (req, res) => {
+    try {
+        // pagination
+        // const page = parseInt(req.query.page) || 1;
+        // const limit = parseInt(req.query.limit) || 5;
+        // const skip = (page - 1) * limit;
 
-    const user = await userModel.findById(userId);
+        const { page, limit, skip } = getPagination(req.query);
 
-    if (!user) {
-      return sendResponse(res, "User not found", 404, false);
-    }
+  
+    //const categories = limit
+        const total = await userModel.countDocuments();
+        const users = await userModel.find().skip(skip).limit(limit);
 
-    const userData = {
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      mobile: user.mobile,
-    };
+        // Map each user to the required response format
+        const userList = users.map(user => ({
+            id: user._id,
+            slug: user.name || user.slug,  // adjust as per your user schema
+            email: user.email,
+            mobile: user.mobile,
+        }));
 
-    return sendResponse(res, "User profile fetched successfully", 200, true, {
-      user: userData,
-    });
-  } catch (error) {
-    console.error("Get User Profile Error:", error);
-    return sendResponse(res, "Internal server error", 500, false);
-  }
+        return sendResponse(res, "Users fetched successfully", 200, true, {
+            users: userList,
+            page,
+            limit,
+            total,
+        });
+    } catch (error) {
+        console.error("Get All Users Error:", error);
+        return sendResponse(res, "Internal server error", 500, false);
+
 };
 
 // all users
