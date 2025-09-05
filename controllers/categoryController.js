@@ -201,6 +201,34 @@ exports.deleteCategory = async (req, res) => {
   }
 };
 
+// Delete all categories
+exports.deleteAllCategories = async (req, res) => {
+  try {
+    // Get all categories to access their images
+    const allCategories = await Category.find({});
+
+    // Collect all images
+    const imagesToDelete = allCategories
+      .map((category) => category.image)
+      .filter((img) => !!img);
+
+    // Delete all images from Cloudinary
+    if (imagesToDelete.length > 0) {
+      await deleteOldImages(imagesToDelete);
+    }
+
+    // Delete all categories from database
+    const result = await Category.deleteMany({});
+
+    return sendResponse(res, "All categories deleted successfully", 200, true, {
+      deletedCount: result.deletedCount,
+    });
+  } catch (error) {
+    console.error("Error deleting all categories:", error);
+    return sendResponse(res, "Error deleting all categories", 500, false);
+  }
+};
+
 // get all categories
 exports.getAllCategories = async (req, res) => {
   try {
@@ -257,34 +285,6 @@ exports.getCategoryById = async (req, res) => {
   } catch (error) {
     // console.error("Error fetching category:", error);
     return sendResponse(res, "Error fetching category", 500, false);
-  }
-};
-
-// Delete all categories
-exports.deleteAllCategories = async (req, res) => {
-  try {
-    // Get all categories to access their images
-    const allCategories = await Category.find({});
-
-    // Collect all images
-    const imagesToDelete = allCategories
-      .map((category) => category.image)
-      .filter((img) => !!img);
-
-    // Delete all images from Cloudinary
-    if (imagesToDelete.length > 0) {
-      await deleteOldImages(imagesToDelete);
-    }
-
-    // Delete all categories from database
-    const result = await Category.deleteMany({});
-
-    return sendResponse(res, "All categories deleted successfully", 200, true, {
-      deletedCount: result.deletedCount,
-    });
-  } catch (error) {
-    console.error("Error deleting all categories:", error);
-    return sendResponse(res, "Error deleting all categories", 500, false);
   }
 };
 

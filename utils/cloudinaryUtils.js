@@ -71,12 +71,11 @@ const cleanupTemporaryFiles = async (files) => {
   await Promise.allSettled(
     files.map((file) => {
       const filePath = file.path || path.join("uploads", file.filename);
-      return fs.unlink(filePath).catch((err) => {
+      return fs.promises.unlink(filePath).catch((err) => {
         console.error(`❌ Failed to delete temp file: ${filePath}`, err);
       });
     })
   );
 };
-
 
 module.exports = { deleteOldImages, uploadImages, cleanupTemporaryFiles };

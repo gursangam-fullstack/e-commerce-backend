@@ -2,9 +2,9 @@ const SubCategory = require("../model/subCategory");
 const slugify = require("slugify");
 const sendResponse = require("../utils/sendResponse");
 
-const getPagination = require("../utils/pagination")
-const SubSubCategory  = require("../model/subSubCategory");
-const Product  = require("../model/product");
+const getPagination = require("../utils/pagination");
+const SubSubCategory = require("../model/subSubCategory");
+const Product = require("../model/product");
 const {
   deleteOldImages,
   uploadImages,
@@ -22,7 +22,7 @@ cloudinary.config({
   secure: true,
 });
 
-// create sub category 
+// create sub category
 exports.createSubCategory = async (req, res) => {
   try {
     const { name, parentCategoryId } = req.body;
@@ -113,76 +113,6 @@ exports.createSubCategory = async (req, res) => {
   }
 };
 
-// get all sub category 
-exports.getAllSubCategories = async (req, res) => {
-  try {
-
-    //pagination code
-    // const page = parseInt(req.query.page) || 0;
-    // const limit = parseInt(req.query.limit) || 0;
-    // const skip = (page - 1) * limit;
-    // const total = await SubCategory.countDocuments();
-    const { page, limit, skip } = getPagination(req.query);
-    
-        const total = await Category.countDocuments();
-        const subcategories = limit
-    //end
-
-
-    const subCategories = await SubCategory.find()
-      .skip(skip)
-      .limit(limit)
-      .populate("parentCategory", "name slug images");
-
-    const updatedSubCategories = subCategories.map((sub) => {
-      const parent = sub.parentCategory;
-
-      // Subcategory images
-      const subCategoryImageUrls = sub.images || [];
-
-      // Parent category first image
-      const parentImageUrl =
-        parent && parent.images && parent.images.length > 0
-          ? parent.images[0]
-          : null;
-
-      return {
-        id: sub._id,
-        name: sub.name,
-        slug: sub.slug,
-        images: subCategoryImageUrls,
-        category: parent
-          ? {
-              id: parent._id,
-              name: parent.name,
-              slug: parent.slug,
-              imageUrl: parentImageUrl,
-            }
-          : null,
-      };
-    });
-
-    // calculate hasMore
-    const hasMore = limit > 0 ? page * limit < total : false;
-
-    return sendResponse(
-      res,
-      "SubCategories retrieved successfully",
-      200,
-      true,
-      {
-        data: updatedSubCategories,
-        total,
-        page,
-        limit,
-        hasMore,
-      }
-    );
-  } catch (error) {
-    return sendResponse(res, "Error fetching subcategories", 500, false);
-  }
-};
-
 // Update sub Category
 exports.updateSubCategory = async (req, res) => {
   try {
@@ -252,7 +182,7 @@ exports.updateSubCategory = async (req, res) => {
 };
 
 // delete sub category
-exports.deleteSubCategory = async (req, res) => {
+exports.deletesubCategory = async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -276,7 +206,10 @@ exports.deleteSubCategory = async (req, res) => {
         });
         await Promise.all(deletePromises);
       } catch (err) {
-        console.error("Error deleting subcategory images from Cloudinary:", err);
+        console.error(
+          "Error deleting subcategory images from Cloudinary:",
+          err
+        );
         // continue DB delete even if Cloudinary fails
       }
     }
@@ -291,7 +224,7 @@ exports.deleteSubCategory = async (req, res) => {
   }
 };
 
-// delete all sub category 
+// delete all sub category
 exports.deleteAllSubCategory = async (req, res) => {
   try {
     // Get all subcategories to access their images before deletion
@@ -333,7 +266,74 @@ exports.deleteAllSubCategory = async (req, res) => {
   }
 };
 
-// get sub category by id 
+// get all sub category
+exports.getAllSubCategories = async (req, res) => {
+  try {
+    //pagination code
+    // const page = parseInt(req.query.page) || 0;
+    // const limit = parseInt(req.query.limit) || 0;
+    // const skip = (page - 1) * limit;
+    // const total = await SubCategory.countDocuments();
+    const { page, limit, skip } = getPagination(req.query);
+
+    const total = await Category.countDocuments();
+    const subcategories = limit;
+    //end
+
+    const subCategories = await SubCategory.find()
+      .skip(skip)
+      .limit(limit)
+      .populate("parentCategory", "name slug images");
+
+    const updatedSubCategories = subCategories.map((sub) => {
+      const parent = sub.parentCategory;
+
+      // Subcategory images
+      const subCategoryImageUrls = sub.images || [];
+
+      // Parent category first image
+      const parentImageUrl =
+        parent && parent.images && parent.images.length > 0
+          ? parent.images[0]
+          : null;
+
+      return {
+        id: sub._id,
+        name: sub.name,
+        slug: sub.slug,
+        images: subCategoryImageUrls,
+        category: parent
+          ? {
+              id: parent._id,
+              name: parent.name,
+              slug: parent.slug,
+              imageUrl: parentImageUrl,
+            }
+          : null,
+      };
+    });
+
+    // calculate hasMore
+    const hasMore = limit > 0 ? page * limit < total : false;
+
+    return sendResponse(
+      res,
+      "SubCategories retrieved successfully",
+      200,
+      true,
+      {
+        data: updatedSubCategories,
+        total,
+        page,
+        limit,
+        hasMore,
+      }
+    );
+  } catch (error) {
+    return sendResponse(res, "Error fetching subcategories", 500, false);
+  }
+};
+// get sub category by id
 exports.getSubCategoryById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -356,7 +356,7 @@ exports.getSubCategoryById = async (req, res) => {
   }
 };
 
-// get sub category by category 
+// get sub category by category
 exports.getSubCategoriesByCategory = async (req, res) => {
   try {
     const { categoryId } = req.params;
@@ -413,7 +413,7 @@ exports.getSubCategoriesByCategory = async (req, res) => {
   }
 };
 
-// get sub category with related data 
+// get sub category with related data
 exports.getSubCategoryWithRelatedData = async (req, res) => {
   try {
     const { categorySlug, subCategorySlug } = req.params;

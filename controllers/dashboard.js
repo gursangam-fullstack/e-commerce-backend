@@ -1,4 +1,3 @@
-
 const orderModel = require("../model/order");
 const userModel = require("../model/User");
 
@@ -34,6 +33,7 @@ exports.getDashboardStatus= async (req, res) => {
     return sendResponse(res, "Error fetching dashboard stats", 500, false);
   }
 };
+
 exports.getTopProducts = async (req, res) => {
   try {
     const topProducts = await orderModel.aggregate([
@@ -74,7 +74,6 @@ exports.getTopProducts = async (req, res) => {
     return sendResponse(res, "Error fetching top products", 500, false);
   }
 };
-
 
 exports.getGrwothStatus = async(req,res)=>{
   const now =new Date();
