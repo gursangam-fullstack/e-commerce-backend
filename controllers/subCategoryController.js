@@ -1,4 +1,3 @@
-const subCategory = require("../model/subCategory");
 const SubCategory = require("../model/subCategory");
 const slugify = require("slugify");
 const sendResponse = require("../utils/sendResponse");
@@ -6,10 +5,14 @@ const sendResponse = require("../utils/sendResponse");
 const getPagination = require("../utils/pagination")
 const SubSubCategory  = require("../model/subSubCategory");
 const Product  = require("../model/product");
+const {
+  deleteOldImages,
+  uploadImages,
+  cleanupTemporaryFiles,
+} = require("../utils/cloudinaryUtils");
 
 const Category = require("../model/category");
 const cloudinary = require("cloudinary").v2;
-const fs = require("fs");
 const mongoose = require("mongoose");
 
 cloudinary.config({
@@ -19,66 +22,24 @@ cloudinary.config({
   secure: true,
 });
 
-// Helper function to extract Cloudinary public_id from URL
-const extractPublicIdFromUrl = (url) => {
-  try {
-    // Parse the URL to get the path
-    const urlParts = url.split("/");
-    // Find the upload part and get everything after it
-    const uploadIndex = urlParts.findIndex((part) => part === "upload");
-    if (uploadIndex !== -1 && uploadIndex + 2 < urlParts.length) {
-      // Get the version and public_id parts
-      const versionAndPublicId = urlParts.slice(uploadIndex + 2).join("/");
-      // Remove the file extension
-      const publicId = versionAndPublicId.split(".")[0];
-      return publicId;
-    }
-    return null;
-  } catch (error) {
-    // console.error("Error extracting public_id from URL:", error);
-    return null;
-  }
-};
-
-// Helper function to clean up temporary files
-const cleanupTemporaryFiles = (files) => {
-  if (!files || files.length === 0) return;
-
-  for (const file of files) {
-    try {
-      const filePath = `uploads/${file.filename}`;
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-        // console.log(`Cleaned up temporary file: ${file.filename}`);
-      }
-    } catch (cleanupError) {
-      // console.error(`Error cleaning up file ${file.filename}:`, cleanupError);
-    }
-  }
-};
-
+// create sub category 
 exports.createSubCategory = async (req, res) => {
   try {
     const { name, parentCategoryId } = req.body;
-    const subCategoryImages = req.files;
+    const files = req.files || [];
 
-    // Validate subcategory name
+    // Validate inputs
     if (!name) {
-      return sendResponse(
-        res,
-        "Subcategory name should not be empty",
-        400,
-        false
-      );
+      cleanupTemporaryFiles(files);
+      return sendResponse(res, "Subcategory name is required", 400, false);
     }
 
-    // Validate parent category
     if (!parentCategoryId) {
+      cleanupTemporaryFiles(files);
       return sendResponse(res, "Parent category ID is required", 400, false);
     }
 
-    // Validate images
-    if (!subCategoryImages || subCategoryImages.length === 0) {
+    if (!files.length) {
       return sendResponse(res, "At least one image is required", 400, false);
     }
 
@@ -87,10 +48,11 @@ exports.createSubCategory = async (req, res) => {
     // 🔍 Check if subcategory with same slug exists under the same parent
     const slugExists = await SubCategory.findOne({
       parentCategory: parentCategoryId,
-      slug: slug,
+      slug,
     });
 
     if (slugExists) {
+      cleanupTemporaryFiles(files);
       return sendResponse(
         res,
         "Subcategory already exists under this parent category",
@@ -99,41 +61,13 @@ exports.createSubCategory = async (req, res) => {
       );
     }
 
-    // Upload images to Cloudinary
-    const imagesArr = [];
-    const uploadedFiles = []; // Track files that were successfully uploaded
-    const options = {
-      use_filename: true,
-      unique_filename: false,
-      overwrite: false,
-    };
+    // Upload images (parallel + cleanup)
+    const uploadedUrls = await uploadImages(files);
 
-    try {
-      for (let i = 0; i < subCategoryImages.length; i++) {
-        const result = await cloudinary.uploader.upload(
-          subCategoryImages[i].path,
-          options
-        );
-        imagesArr.push(result.secure_url);
-        uploadedFiles.push(subCategoryImages[i]); // Track successfully uploaded files
-
-        // Delete the temporary file after successful upload
-        try {
-          fs.unlinkSync(`uploads/${subCategoryImages[i].filename}`);
-          // console.log(`Temporary file deleted: ${subCategoryImages[i].filename}`);
-        } catch (deleteError) {
-          // console.error(`Error deleting temporary file ${subCategoryImages[i].filename}:`, deleteError);
-        }
-      }
-    } catch (uploadError) {
-      // console.error("Error uploading image:", uploadError);
-
-      // Clean up any temporary files that might still exist
-      cleanupTemporaryFiles(subCategoryImages);
-
+    if (!uploadedUrls.length) {
       return sendResponse(
         res,
-        "Error uploading image to Cloudinary",
+        "Failed to upload images. Please try again.",
         500,
         false
       );
@@ -143,7 +77,7 @@ exports.createSubCategory = async (req, res) => {
     const subCategory = new SubCategory({
       name,
       slug,
-      images: imagesArr, // Save array of Cloudinary URLs
+      images: uploadedUrls,
       parentCategory: parentCategoryId,
     });
 
@@ -153,14 +87,10 @@ exports.createSubCategory = async (req, res) => {
       data: subCategory,
     });
   } catch (error) {
-    // console.error("Error creating subcategory:", error);
+    console.error("Error creating subcategory:", error);
 
-    // Clean up any temporary files in case of any error
-    if (req.files && req.files.length > 0) {
-      cleanupTemporaryFiles(req.files);
-    }
+    if (req.files?.length) cleanupTemporaryFiles(req.files);
 
-    // Handle multer file size error
     if (error.code === "LIMIT_FILE_SIZE") {
       return sendResponse(
         res,
@@ -170,8 +100,7 @@ exports.createSubCategory = async (req, res) => {
       );
     }
 
-    // Handle other multer errors
-    if (error.message && error.message.includes("Only images are allowed")) {
+    if (error.message?.includes("Only images are allowed")) {
       return sendResponse(
         res,
         "Only image files (JPEG, PNG, JPG) are allowed",
@@ -184,7 +113,7 @@ exports.createSubCategory = async (req, res) => {
   }
 };
 
-// get all products
+// get all sub category 
 exports.getAllSubCategories = async (req, res) => {
   try {
 
@@ -254,137 +183,52 @@ exports.getAllSubCategories = async (req, res) => {
   }
 };
 
-// Update Category
+// Update sub Category
 exports.updateSubCategory = async (req, res) => {
   try {
-    const { name, parent } = req.body;
-    const subCategoryImages = req.files;
+    const { name, parentCategoryId, description } = req.body;
+    const files = req.files || [];
 
-    // Get the existing subcategory to access current images
+    // Fetch existing subcategory
     const existingSubCategory = await SubCategory.findById(req.params.id);
     if (!existingSubCategory) {
-      return sendResponse(res, "SubCategory not found", 404, false);
+      cleanupTemporaryFiles(files);
+      return sendResponse(res, "Subcategory not found", 404, false);
     }
 
-    // Prepare update object (only name, images, parentCategory)
-    const updateData = {
-      name,
-    };
-
-    // Only update parentCategory if parent is explicitly provided
-    if (parent !== undefined) {
-      updateData.parentCategory = parent || null;
-    }
-
-    // Generate new slug if name is being updated
+    // Build update data
+    const updateData = {};
     if (name) {
-      const newSlug = slugify(name, { lower: true, strict: true });
-      updateData.slug = newSlug;
+      updateData.name = name;
+      updateData.slug = slugify(name, { lower: true, strict: true });
+    }
+    if (description) updateData.description = description;
+    if (parentCategoryId) updateData.parentCategory = parentCategoryId;
+
+    // Handle image replacement
+    if (files.length > 0) {
+      // delete old images
+      await deleteOldImages(existingSubCategory.images);
+
+      // upload new images
+      updateData.images = await uploadImages(files);
     }
 
-    // Only update images if new images are uploaded
-    if (subCategoryImages && subCategoryImages.length > 0) {
-      // Delete old images from Cloudinary if they exist
-      if (existingSubCategory.images && existingSubCategory.images.length > 0) {
-        try {
-          for (const imageUrl of existingSubCategory.images) {
-            // Extract public_id from Cloudinary URL
-            const publicId = extractPublicIdFromUrl(imageUrl);
-            if (publicId) {
-              await cloudinary.uploader.destroy(publicId);
-            }
-          }
-        } catch (deleteError) {
-          // console.error("Error deleting old images from Cloudinary:", deleteError);
-          // Continue with upload even if deletion fails
-        }
-      }
-
-      // Upload new images to Cloudinary
-      const imagesArr = [];
-      const uploadedFiles = []; // Track files that were successfully uploaded
-      const options = {
-        use_filename: true,
-        unique_filename: false,
-        overwrite: false,
-      };
-
-      try {
-        for (let i = 0; i < subCategoryImages.length; i++) {
-          const result = await cloudinary.uploader.upload(
-            subCategoryImages[i].path,
-            options
-          );
-          imagesArr.push(result.secure_url);
-          uploadedFiles.push(subCategoryImages[i]); // Track successfully uploaded files
-
-          // Delete the temporary file after successful upload
-          try {
-            fs.unlinkSync(`uploads/${subCategoryImages[i].filename}`);
-            // console.log(`Temporary file deleted: ${subCategoryImages[i].filename}`);
-          } catch (deleteError) {
-            // console.error(`Error deleting temporary file ${subCategoryImages[i].filename}:`, deleteError);
-          }
-        }
-        updateData.images = imagesArr;
-      } catch (uploadError) {
-        // console.error("Error uploading image:", uploadError);
-
-        // Clean up any temporary files that might still exist
-        cleanupTemporaryFiles(subCategoryImages);
-
-        return sendResponse(
-          res,
-          "Error uploading image to Cloudinary",
-          500,
-          false
-        );
-      }
-    }
-
+    // Update subcategory in DB
     const updated = await SubCategory.findByIdAndUpdate(
       req.params.id,
       updateData,
-      { new: true, runValidators: true }
-    ).populate("parentCategory", "name slug images");
-
-    // Subcategory image(s) - now using Cloudinary URLs directly
-    let subCategoryImageUrls = updated.images || [];
-
-    // Parent category image - now using Cloudinary URLs directly
-    const parentCat = updated.parentCategory;
-    let parentImageUrl = null;
-    if (parentCat && parentCat.images && parentCat.images.length > 0) {
-      parentImageUrl = parentCat.images[0];
-    }
-
-    const responseData = {
-      id: updated._id,
-      name: updated.name,
-      slug: updated.slug,
-      images: subCategoryImageUrls,
-      parentCategory: parentCat
-        ? {
-            id: parentCat._id,
-            name: parentCat.name,
-            slug: parentCat.slug,
-            imageUrl: parentImageUrl,
-          }
-        : null,
-    };
+      { new: true }
+    );
 
     return sendResponse(res, "SubCategory updated successfully", 200, true, {
-      data: responseData,
+      data: updated,
     });
   } catch (error) {
-    // console.error("Error updating subcategory:", error);
+    console.error("Error updating subcategory:", error);
 
-    // Clean up any temporary files in case of any error
-    if (req.files && req.files.length > 0) {
-      cleanupTemporaryFiles(req.files);
-    }
+    if (req.files?.length) cleanupTemporaryFiles(req.files);
 
-    // Handle multer file size error
     if (error.code === "LIMIT_FILE_SIZE") {
       return sendResponse(
         res,
@@ -394,8 +238,7 @@ exports.updateSubCategory = async (req, res) => {
       );
     }
 
-    // Handle other multer errors
-    if (error.message && error.message.includes("Only images are allowed")) {
+    if (error.message?.includes("Only images are allowed")) {
       return sendResponse(
         res,
         "Only image files (JPEG, PNG, JPG) are allowed",
@@ -409,47 +252,46 @@ exports.updateSubCategory = async (req, res) => {
 };
 
 // delete sub category
-exports.deletesubCategory = async (req, res) => {
+exports.deleteSubCategory = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Check for valid MongoDB ObjectId
+    // ✅ Validate ObjectId
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return sendResponse(res, "Invalid subcategory ID", 400, false);
     }
 
-    // Get the subcategory to access its images before deletion
-    const subCategory = await SubCategory.findById(id);
+    // ✅ Fetch subcategory (lean for performance since no doc methods needed)
+    const subCategory = await SubCategory.findById(id).lean();
     if (!subCategory) {
       return sendResponse(res, "SubCategory not found", 404, false);
     }
 
-    // Delete images from Cloudinary if they exist
-    if (subCategory.images && subCategory.images.length > 0) {
+    // ✅ Delete Cloudinary images (parallel for performance)
+    if (subCategory.images?.length) {
       try {
-        for (const imageUrl of subCategory.images) {
-          // Extract public_id from Cloudinary URL
-          const publicId = extractPublicIdFromUrl(imageUrl);
-          if (publicId) {
-            await cloudinary.uploader.destroy(publicId);
-          }
-        }
-      } catch (deleteError) {
-        // console.error("Error deleting images from Cloudinary:", deleteError);
-        // Continue with subcategory deletion even if image deletion fails
+        const deletePromises = subCategory.images.map((url) => {
+          const publicId = extractPublicIdFromUrl(url);
+          return publicId ? cloudinary.uploader.destroy(publicId) : null;
+        });
+        await Promise.all(deletePromises);
+      } catch (err) {
+        console.error("Error deleting subcategory images from Cloudinary:", err);
+        // continue DB delete even if Cloudinary fails
       }
     }
 
-    // Delete the subcategory from database
-    const deletedSubCategory = await SubCategory.findByIdAndDelete(id);
+    // ✅ Delete subcategory from DB
+    await SubCategory.findByIdAndDelete(id);
 
     return sendResponse(res, "SubCategory deleted successfully", 200, true);
   } catch (error) {
-    // console.error("Delete subcategory error:", error);
+    console.error("Error deleting subcategory:", error);
     return sendResponse(res, "Error deleting subcategory", 500, false);
   }
 };
 
+// delete all sub category 
 exports.deleteAllSubCategory = async (req, res) => {
   try {
     // Get all subcategories to access their images before deletion
@@ -491,6 +333,7 @@ exports.deleteAllSubCategory = async (req, res) => {
   }
 };
 
+// get sub category by id 
 exports.getSubCategoryById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -513,6 +356,7 @@ exports.getSubCategoryById = async (req, res) => {
   }
 };
 
+// get sub category by category 
 exports.getSubCategoriesByCategory = async (req, res) => {
   try {
     const { categoryId } = req.params;
@@ -569,6 +413,7 @@ exports.getSubCategoriesByCategory = async (req, res) => {
   }
 };
 
+// get sub category with related data 
 exports.getSubCategoryWithRelatedData = async (req, res) => {
   try {
     const { categorySlug, subCategorySlug } = req.params;

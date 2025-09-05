@@ -5,7 +5,7 @@ const fs = require("fs");
 // Import Models
 const Category = require("../model/category");
 const sendResponse = require("../utils/sendResponse");
-const getPagination = require("../utils/pagination")
+const getPagination = require("../utils/pagination");
 const slugify = require("slugify");
 const {
   deleteOldImages,
@@ -16,7 +16,6 @@ const SubCategory = require("../model/subCategory");
 const SubSubCategory = require("../model/subSubCategory");
 const Product = require("../model/product");
 
-const { extractPublicIdFromUrl, cleanupTemporaryFiles } = require("../utils/categoryHelper");
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CONFIG_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_CONFIG_API_KEY,
@@ -24,79 +23,53 @@ cloudinary.config({
   secure: true,
 });
 
-
+// create category 
 exports.createCategoryController = async (req, res) => {
   try {
     const { name } = req.body;
     const slug = slugify(name, { lower: true, strict: true });
-    const categoryImages = req.files;
+    const files = req.files || [];
 
-    // Validate category name
+    // Validate input
     if (!name) {
-      return sendResponse(res, "Category name should not be empty", 400, false);
+      cleanupTemporaryFiles(files);
+      return sendResponse(res, "Category name is required", 400, false);
     }
 
-    // Validate images
-    if (!categoryImages || categoryImages.length === 0) {
+    if (!files.length) {
       return sendResponse(res, "No image provided", 400, false);
     }
 
     // Check if category already exists
     const existingCategory = await Category.findOne({
       $or: [
-        { name: { $regex: new RegExp(`^${name}$`, "i") } }, // Case-insensitive name match
-        { slug: slug }, // Slug match
+        { name: { $regex: new RegExp(`^${name}$`, "i") } }, // Case-insensitive
+        { slug },
       ],
     });
 
     if (existingCategory) {
+      cleanupTemporaryFiles(files);
       return sendResponse(res, "Category already exists", 400, false);
     }
 
-    // Upload images to Cloudinary
-    const imagesArr = [];
-    const uploadedFiles = []; // Track files that were successfully uploaded
-    const options = {
-      use_filename: true,
-      unique_filename: false,
-      overwrite: false,
-    };
+    // Upload images (parallel + safe cleanup)
+    const uploadedUrls = await uploadImages(files);
 
-    try {
-      for (let i = 0; i < categoryImages.length; i++) {
-        const result = await cloudinary.uploader.upload(
-          categoryImages[i].path,
-          options
-        );
-        imagesArr.push(result.secure_url);
-        uploadedFiles.push(categoryImages[i]); // Track successfully uploaded files
-
-        // Delete the temporary file after successful upload
-        try {
-          fs.unlinkSync(`uploads/${categoryImages[i].filename}`);
-          // console.log(`Temporary file deleted: ${categoryImages[i].filename}`);
-        } catch (deleteError) {
-          // console.error(`Error deleting temporary file ${categoryImages[i].filename}:`, deleteError);
-        }
-      }
-    } catch (uploadError) {
-      // console.error("Error uploading image:", uploadError);
-
-      // Clean up any temporary files that might still exist
-      cleanupTemporaryFiles(categoryImages);
-
+    if (!uploadedUrls.length) {
       return sendResponse(
         res,
-        "Error uploading image to Cloudinary",
+        "Failed to upload images. Please try again.",
         500,
         false
       );
     }
 
+    // Save category
     const category = new Category({
       name,
       slug,
-      images: imagesArr, // Save array of Cloudinary URLs
+      images: uploadedUrls,
     });
 
     await category.save();
@@ -105,14 +78,10 @@ exports.createCategoryController = async (req, res) => {
       data: category,
     });
   } catch (error) {
-    // console.error("Error creating category:", error);
+    console.error("Error creating category:", error);
 
-    // Clean up any temporary files in case of any error
-    if (req.files && req.files.length > 0) {
-      cleanupTemporaryFiles(req.files);
-    }
+    if (req.files?.length) cleanupTemporaryFiles(req.files);
 
-    // Handle multer file size error
     if (error.code === "LIMIT_FILE_SIZE") {
       return sendResponse(
         res,
@@ -122,8 +91,7 @@ exports.createCategoryController = async (req, res) => {
       );
     }
 
-    // Handle other multer errors
-    if (error.message && error.message.includes("Only images are allowed")) {
+    if (error.message?.includes("Only images are allowed")) {
       return sendResponse(
         res,
         "Only image files (JPEG, PNG, JPG) are allowed",
@@ -133,70 +101,6 @@ exports.createCategoryController = async (req, res) => {
     }
 
     return sendResponse(res, "Error creating category", 500, false);
-  }
-};
-
-// get all categories
-exports.getAllCategories = async (req, res) => {
-  try {
-    // pagination code
-    // const page = parseInt(req.query.page) || 1;
-    // const limit = parseInt(req.query.limit);
-    // const skip = (page - 1) * (limit || 0);
-    // const total = await Category.countDocuments();
- const { page, limit, skip } = getPagination(req.query);
-
-    const total = await Category.countDocuments();
-    const categories = limit
-      ? await Category.find().skip(skip).limit(limit)
-      : await Category.find();
-
-    const updatedCategories = categories.map((cat) => {
-      const imageUrl =
-        cat.images && cat.images.length > 0 ? cat.images[0] : null;
-
-      return {
-        id: cat._id,
-        name: cat.name,
-        slug: cat.slug,
-        imageUrl: imageUrl, // Now using Cloudinary URL directly
-      };
-    });
-
-    return sendResponse(res, "Categories retrieved successfully", 200, true, {
-      data: updatedCategories,
-      total,
-      page,
-      limit: limit || total,
-    });
-  } catch (error) {
-    console.log(error)
-    return sendResponse(res, "Error fetching categories", 500, false);
-  }
-};
-
-// Get  single category
-exports.getCategoryById = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    // ✅ Check for valid MongoDB ObjectId
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return sendResponse(res, "Invalid category ID", 400, false);
-    }
-
-    const category = await Category.findById(id).populate("name");
-
-    if (!category) {
-      return sendResponse(res, "Category not found", 404, false);
-    }
-
-    return sendResponse(res, "Category retrieved successfully", 200, true, {
-      data: category,
-    });
-  } catch (error) {
-    // console.error("Error fetching category:", error);
-    return sendResponse(res, "Error fetching category", 500, false);
   }
 };
 
@@ -219,17 +123,17 @@ exports.updateCategory = async (req, res) => {
 
     // Handle image replacement
     if (files.length > 0) {
+      // delete old images (parallel + safe)
       await deleteOldImages(existingCategory.images);
+
+      // upload new images (parallel + safe cleanup)
       updateData.images = await uploadImages(files);
     }
 
-    const updated = await Category.findByIdAndUpdate(
-      req.params.id,
-      updateData,
-      {
-        new: true,
-      }
-    );
+    // Update category in DB
+    const updated = await Category.findByIdAndUpdate(req.params.id, updateData, {
+      new: true,
+    });
 
     return sendResponse(res, "Category updated successfully", 200, true, {
       data: updated,
@@ -266,23 +170,28 @@ exports.deleteCategory = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Validate ObjectId
+    // ✅ Validate ObjectId early
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return sendResponse(res, "Invalid category ID", 400, false);
     }
 
-    // Find category
-    const category = await Category.findById(id);
+    // ✅ Fetch only once (lean for performance since no document methods needed)
+    const category = await Category.findById(id).lean();
     if (!category) {
       return sendResponse(res, "Category not found", 404, false);
     }
 
-    // Delete old image if exists
+    // ✅ Delete Cloudinary image if it exists
     if (category.image) {
-      await deleteOldImages([category.image]);
+      try {
+        await deleteOldImages([category.image]);
+      } catch (err) {
+        console.error("Error deleting Cloudinary image:", err);
+        // Don’t block DB delete if Cloudinary fails
+      }
     }
 
-    // Delete from DB
+    // ✅ Delete category from DB
     await Category.findByIdAndDelete(id);
 
     return sendResponse(res, "Category deleted successfully", 200, true);
@@ -292,7 +201,64 @@ exports.deleteCategory = async (req, res) => {
   }
 };
 
-// delete all
+// get all categories
+exports.getAllCategories = async (req, res) => {
+  try {
+    const { page, limit, skip } = getPagination(req.query);
+
+    const total = await Category.countDocuments();
+    const categories = limit
+      ? await Category.find().skip(skip).limit(limit)
+      : await Category.find();
+
+    const updatedCategories = categories.map((cat) => {
+      const imageUrl =
+        cat.images && cat.images.length > 0 ? cat.images[0] : null;
+
+      return {
+        id: cat._id,
+        name: cat.name,
+        slug: cat.slug,
+        imageUrl: imageUrl, 
+      };
+    });
+
+    return sendResponse(res, "Categories retrieved successfully", 200, true, {
+      data: updatedCategories,
+      total,
+      page,
+      limit: limit || total,
+    });
+  } catch (error) {
+    console.log(error);
+    return sendResponse(res, "Error fetching categories", 500, false);
+  }
+};
+
+// Get  single category
+exports.getCategoryById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // ✅ Check for valid MongoDB ObjectId
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return sendResponse(res, "Invalid category ID", 400, false);
+    }
+
+    const category = await Category.findById(id).populate("name");
+
+    if (!category) {
+      return sendResponse(res, "Category not found", 404, false);
+    }
+
+    return sendResponse(res, "Category retrieved successfully", 200, true, {
+      data: category,
+    });
+  } catch (error) {
+    // console.error("Error fetching category:", error);
+    return sendResponse(res, "Error fetching category", 500, false);
+  }
+};
 
 // Delete all categories
 exports.deleteAllCategories = async (req, res) => {
@@ -345,9 +311,13 @@ exports.getCategoryWithAllRelatedData = async (req, res) => {
       SubCategory.find({ parentCategory: category._id })
         .select("_id name slug")
         .lean(),
-      SubSubCategory.find({ parentSubCategory: { $in: 
-        await SubCategory.find({ parentCategory: category._id }).distinct("_id")
-      }})
+      SubSubCategory.find({
+        parentSubCategory: {
+          $in: await SubCategory.find({
+            parentCategory: category._id,
+          }).distinct("_id"),
+        },
+      })
         .select("_id name slug parentSubCategory")
         .lean(),
       Product.find({ categories: category._id })
@@ -375,12 +345,17 @@ exports.getCategoryWithAllRelatedData = async (req, res) => {
       },
     };
 
-    return sendResponse(res, "Category data retrieved successfully", 200, true, {
-      data: response,
-    });
+    return sendResponse(
+      res,
+      "Category data retrieved successfully",
+      200,
+      true,
+      {
+        data: response,
+      }
+    );
   } catch (error) {
     console.error("Error fetching category data:", error);
     return sendResponse(res, "Error fetching category data", 500, false);
   }
 };
-

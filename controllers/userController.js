@@ -388,6 +388,7 @@ exports.userProfile = async (req, res) => {
   }
 };
 
+// get all users - admin
 exports.getAllUsers = async (req, res) => {
   try {
     // pagination
@@ -398,36 +399,6 @@ exports.getAllUsers = async (req, res) => {
     const { page, limit, skip } = getPagination(req.query);
 
     //const categories = limit
-    const total = await userModel.countDocuments();
-    const users = await userModel.find().skip(skip).limit(limit);
-
-    // Map each user to the required response format
-    const userList = users.map((user) => ({
-      id: user._id,
-      slug: user.name || user.slug, // adjust as per your user schema
-      email: user.email,
-      mobile: user.mobile,
-    }));
-
-    return sendResponse(res, "Users fetched successfully", 200, true, {
-      users: userList,
-      page,
-      limit,
-      total,
-    });
-  } catch (error) {
-    console.error("Get All Users Error:", error);
-    return sendResponse(res, "Internal server error", 500, false);
-  }
-};
-
-// all users
-exports.getAllUsers = async (req, res) => {
-  try {
-    // pagination
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 5;
-    const skip = (page - 1) * limit;
     const total = await userModel.countDocuments();
     const users = await userModel.find().skip(skip).limit(limit);
 
