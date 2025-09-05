@@ -2,7 +2,8 @@ const express = require('express');
 const passport = require('passport');
 const authorizeRole = require('../middlewares/authorizeRole');
 const { accessTokenAutoRefresh } = require('../middlewares/accessTokenAutoRefresh');
-const { createOrderController, verifyPayment, webhookHandler, getAllOrdersController, getOrdersByUserIdController } = require('../controllers/orderController')
+const { createOrderController, verifyPayment, webhookHandler, getAllOrdersController, getOrdersByUserIdController,getOrderStatus, 
+    getTodayOrderStats } = require('../controllers/orderController')
 
 const orderRouter = express.Router();
 
@@ -22,4 +23,8 @@ orderRouter.get("/all-orders", accessTokenAutoRefresh, passport.authenticate('jw
 
 orderRouter.get("/get-orders/:userId", accessTokenAutoRefresh, passport.authenticate('jwt', { session: false }), authorizeRole('admin'), getOrdersByUserIdController)
 
+
+//new
+orderRouter.get("/status",getOrderStatus)
+orderRouter.get("/orderStatus",getTodayOrderStats)
 module.exports = orderRouter;

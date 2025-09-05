@@ -1,10 +1,11 @@
 const ListModel = require("../model/myList");
 const ProductModel = require("../model/product");
-const UserModel = require("../model/user");
+const userModel = require("../model/User");
 const sendResponse = require("../utils/sendResponse");
 
 
 const addToMyListController = async (req, res) => {
+
   try {
     const { userId, productId, size, quantity = 1 } = req.body;
 
@@ -16,7 +17,7 @@ const addToMyListController = async (req, res) => {
       return sendResponse(res, "Quantity must be at least 1", 400, false);
     }
 
-    const user = await UserModel.findById(userId);
+    const user = await userModel.findById(userId);
     if (!user) {
       return sendResponse(res, "User not found", 404, false);
     }

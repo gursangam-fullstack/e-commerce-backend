@@ -1,6 +1,7 @@
 const Review = require('../model/review');
 const Product = require('../model/product');
 const sendResponse = require("../utils/sendResponse");
+//const getPagination = require ("../utils/pagination")
 
 // Add review
 exports.createReview = async (req, res) => {
@@ -181,7 +182,9 @@ exports.getUserReviews = async (req, res) => {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
+//const { page, limit, skip } = getPagination(req.query);
 
+   
         // Get total count for pagination
         const total = await Review.countDocuments({ user: userId });
 
@@ -203,7 +206,7 @@ exports.getUserReviews = async (req, res) => {
             }
         });
     } catch (error) {
-        // console.error('Get User Reviews Error:', error);
+         console.error('Get User Reviews Error:', error);
         return sendResponse(res, "Error fetching user reviews", 500, false);
     }
 };
