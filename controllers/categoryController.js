@@ -23,14 +23,13 @@ cloudinary.config({
   secure: true,
 });
 
-// create category 
+// create category
 exports.createCategoryController = async (req, res) => {
   try {
     const { name } = req.body;
     const slug = slugify(name, { lower: true, strict: true });
     const files = req.files || [];
 
-    // Validate input
     if (!name) {
       cleanupTemporaryFiles(files);
       return sendResponse(res, "Category name is required", 400, false);
@@ -40,52 +39,50 @@ exports.createCategoryController = async (req, res) => {
       return sendResponse(res, "No image provided", 400, false);
     }
 
-    // Check if category already exists
+    // Check for existing category
     const existingCategory = await Category.findOne({
-      $or: [
-        { name: { $regex: new RegExp(`^${name}$`, "i") } }, // Case-insensitive
-        { slug },
-      ],
+      $or: [{ name: { $regex: new RegExp(`^${name}$`, "i") } }, { slug }],
     });
-
     if (existingCategory) {
       cleanupTemporaryFiles(files);
       return sendResponse(res, "Category already exists", 400, false);
     }
 
-    // Upload images (parallel + safe cleanup)
-    const uploadedUrls = await uploadImages(files);
+    // Save category first (empty images, fast response)
+    const category = await Category.create({ name, slug, images: [] });
 
-    if (!uploadedUrls.length) {
-      return sendResponse(
-        res,
-        "Failed to upload images. Please try again.",
-        500,
-        false
-      );
-    }
+    // Fire-and-forget async uploads
+    (async () => {
+      try {
+        const uploadedUrls = await uploadImages(files);
+        if (uploadedUrls.length) {
+          await Category.findByIdAndUpdate(category._id, {
+            images: uploadedUrls,
+          });
+        }
+      } catch (err) {
+        console.error("Background image upload failed:", err);
+      }
+    })();
 
-    // Save category
-    const category = new Category({
-      name,
-      slug,
-      images: uploadedUrls,
-    });
-
-    await category.save();
-
-    return sendResponse(res, "Category created successfully", 201, true, {
-      data: category,
-    });
+    // Respond immediately
+    return sendResponse(
+      res,
+      "Category created successfully (images uploading)",
+      201,
+      true,
+      {
+        data: category,
+      }
+    );
   } catch (error) {
     console.error("Error creating category:", error);
-
     if (req.files?.length) cleanupTemporaryFiles(req.files);
 
     if (error.code === "LIMIT_FILE_SIZE") {
       return sendResponse(
         res,
-        "File size too large. Maximum size allowed is 5MB",
+        "File size too large. Max 5MB allowed",
         400,
         false
       );
@@ -121,19 +118,30 @@ exports.updateCategory = async (req, res) => {
     // Build update data
     const updateData = { name, slug, description };
 
-    // Handle image replacement
     if (files.length > 0) {
-      // delete old images (parallel + safe)
-      await deleteOldImages(existingCategory.images);
+      // Start deleting old images in background (non-blocking)
+      if (existingCategory.images?.length) {
+        deleteOldImages(existingCategory.images).catch((err) =>
+          console.error("Error deleting old images:", err)
+        );
+      }
 
-      // upload new images (parallel + safe cleanup)
+      // Upload new images (parallel + safe cleanup)
       updateData.images = await uploadImages(files);
+
+      if (!updateData.images.length) {
+        return sendResponse(res, "Failed to upload new images", 500, false);
+      }
     }
 
     // Update category in DB
-    const updated = await Category.findByIdAndUpdate(req.params.id, updateData, {
-      new: true,
-    });
+    const updated = await Category.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      {
+        new: true,
+      }
+    );
 
     return sendResponse(res, "Category updated successfully", 200, true, {
       data: updated,
@@ -247,7 +255,7 @@ exports.getAllCategories = async (req, res) => {
         id: cat._id,
         name: cat.name,
         slug: cat.slug,
-        imageUrl: imageUrl, 
+        imageUrl: imageUrl,
       };
     });
 
